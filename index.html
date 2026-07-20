@@ -214,10 +214,17 @@
         <h2 id="habitFormTitle">毎日の種目を追加</h2>
         <div class="row2">
           <div><label>種目</label><input id="hfName" placeholder="例: デクラインシットアップ" autocomplete="off"></div>
-          <div><label>目標回数</label><input id="hfTarget" type="number" inputmode="numeric" placeholder="100"></div>
+          <div><label>目標</label><input id="hfTarget" type="number" inputmode="numeric" placeholder="100"></div>
         </div>
-        <div style="margin-bottom:12px"><label>部位</label>
-          <select id="hfPart"><option>胸</option><option>背中</option><option>脚</option><option>肩</option><option>腕</option><option selected>体幹</option><option>有酸素</option></select>
+        <div class="row2">
+          <div><label>単位</label><input id="hfUnit" placeholder="回" autocomplete="off"></div>
+          <div><label>部位</label>
+            <select id="hfPart"><option>胸</option><option>背中</option><option>脚</option><option>肩</option><option>腕</option><option selected>体幹</option><option>有酸素</option><option>水分</option></select>
+          </div>
+        </div>
+        <div class="row2">
+          <div><label>きざみ1（−1／+1ボタン）</label><input id="hfStep1" type="number" inputmode="numeric" placeholder="1"></div>
+          <div><label>きざみ2（+ボタン）</label><input id="hfStep2" type="number" inputmode="numeric" placeholder="10"></div>
         </div>
         <div class="btn-row" style="margin-top:0">
           <button class="btn ghost" id="hfCancel">キャンセル</button>
@@ -288,7 +295,8 @@
   const KEY="kintore_sessions_v2";
   const PARTS=[
     {name:"胸",color:"#ff5c5c"},{name:"背中",color:"#4f8cff"},{name:"脚",color:"#37c871"},
-    {name:"肩",color:"#ff9f43"},{name:"腕",color:"#a879ff"},{name:"体幹",color:"#f7d154"},{name:"有酸素",color:"#2dd4bf"}
+    {name:"肩",color:"#ff9f43"},{name:"腕",color:"#a879ff"},{name:"体幹",color:"#f7d154"},{name:"有酸素",color:"#2dd4bf"},
+    {name:"水分",color:"#38bdf8"}
   ];
   const FEELS=[
     {name:"楽",color:"#37c871"},{name:"普通",color:"#4f8cff"},{name:"キツい",color:"#ff9f43"},{name:"限界",color:"#ff5c5c"}
@@ -484,7 +492,7 @@
       const exs=s.exercises.map(ex=>{
         const isDaily=ex.fromDaily;
         const done=ex.done!==undefined?ex.done:(ex.target?ex.sets[0].r>=ex.target:true);
-        const setStr=isDaily?`${ex.sets[0].r} / ${ex.target}回`
+        const setStr=isDaily?`${ex.sets[0].r} / ${ex.target}${ex.unit||"回"}`
           :ex.sets.map(st=>st.w>0?`${st.w}×${st.r}`:`${st.r}回`).join(", ");
         const status=isDaily?(done?'<span class="ok-badge">達成</span>':'<span class="ng-badge">未達成</span>')
           :`<span class="fl">・${ex.feel}</span>`;
@@ -615,8 +623,13 @@
   function saveDaily(){localStorage.setItem(HKEY,JSON.stringify(dailyHabits));localStorage.setItem(LKEY,JSON.stringify(dailyLog));}
   // seed the user's goal once
   if(!localStorage.getItem("kintore_daily_init")){
-    if(!dailyHabits.length){dailyHabits.push({id:uid(),name:"デクラインシットアップ",target:100,part:"体幹"});saveDaily();}
+    if(!dailyHabits.length){dailyHabits.push({id:uid(),name:"デクラインシットアップ",target:100,part:"体幹",unit:"回",step1:1,step2:10});saveDaily();}
     localStorage.setItem("kintore_daily_init","1");
+  }
+  if(!localStorage.getItem("kintore_water_init")){
+    dailyHabits.push({id:uid(),name:"水分補給",target:2000,part:"水分",unit:"ml",step1:200,step2:500});
+    saveDaily();
+    localStorage.setItem("kintore_water_init","1");
   }
   const dstr=d=>d.getFullYear()+"-"+p2(d.getMonth()+1)+"-"+p2(d.getDate());
   // roll finished days' quota into the training log (JST midnight, or next open)
@@ -631,7 +644,7 @@
         const c=counts[hid];if(!(c>0))return;
         const h=dailyHabits.find(x=>x.id===hid);
         const tgt=h?h.target:c;
-        exs.push({name:h?h.name:"(削除された種目)",part:h&&h.part?h.part:"体幹",feel:"普通",memo:"毎日のノルマ",fromDaily:true,done:c>=tgt,target:tgt,sets:[{w:0,r:c}]});
+        exs.push({name:h?h.name:"(削除された種目)",part:h&&h.part?h.part:"体幹",feel:"普通",memo:"毎日のノルマ",fromDaily:true,done:c>=tgt,target:tgt,unit:h&&h.unit?h.unit:"回",sets:[{w:0,r:c}]});
       });
       flushed.push(date);marked=true;
       if(!exs.length)return;
@@ -664,17 +677,19 @@
     list.innerHTML=dailyHabits.map(h=>{
       const c=getCount(h.id,today),ok=c>=h.target;if(ok)done++;
       const pct=Math.min(100,Math.round(c/h.target*100)),streak=habitStreak(h);
+      const unit=h.unit||"回",s1=h.step1||1,s2=h.step2||10;
+      const countUnit=unit!=="回"?" "+unit:"";
       return `<div class="habit${ok?" done":""}">
         <div class="habit-top">
-          <div class="habit-name">${escapeHtml(h.name)} <span class="tgt">目標 ${h.target}回</span></div>
+          <div class="habit-name">${escapeHtml(h.name)} <span class="tgt">目標 ${h.target}${unit}</span></div>
           <div class="habit-streak">${streak>0?"🔥 "+streak+"日継続":"—"}</div>
         </div>
         <div class="progress"><div class="bar" style="width:${pct}%"></div></div>
-        <div class="habit-count"><span class="cur">${c}</span> / ${h.target}${ok?" ✅":""}</div>
+        <div class="habit-count"><span class="cur">${c}</span> / ${h.target}${countUnit}${ok?" ✅":""}</div>
         <div class="habit-btns">
-          <button data-hact="dec" data-h="${h.id}">−1</button>
-          <button class="plus" data-hact="inc" data-amt="1" data-h="${h.id}">＋1</button>
-          <button class="plus" data-hact="inc" data-amt="10" data-h="${h.id}">＋10</button>
+          <button data-hact="dec" data-amt="${s1}" data-h="${h.id}">−${s1}</button>
+          <button class="plus" data-hact="inc" data-amt="${s1}" data-h="${h.id}">＋${s1}</button>
+          <button class="plus" data-hact="inc" data-amt="${s2}" data-h="${h.id}">＋${s2}</button>
           <button class="doneBtn" data-hact="done" data-h="${h.id}">完了</button>
         </div>
         <div class="habit-manage">
@@ -690,7 +705,7 @@
     const t=e.target.closest("[data-hact]");if(!t)return;
     const act=t.dataset.hact,id=t.dataset.h,h=dailyHabits.find(x=>x.id===id);if(!h)return;
     if(act==="inc")setCount(id,getCount(id,todayStr())+(+t.dataset.amt));
-    else if(act==="dec")setCount(id,getCount(id,todayStr())-1);
+    else if(act==="dec")setCount(id,getCount(id,todayStr())-(+t.dataset.amt));
     else if(act==="done")setCount(id,h.target);
     else if(act==="reset"){if(getCount(id,todayStr())>0&&!confirm("今日のカウントを0に戻しますか？"))return;setCount(id,0);}
     else if(act==="edit"){openHabitForm(h);return;}
@@ -702,7 +717,10 @@
     document.getElementById("habitFormTitle").textContent=h?"習慣を編集":"毎日の種目を追加";
     document.getElementById("hfName").value=h?h.name:"";
     document.getElementById("hfTarget").value=h?h.target:"";
+    document.getElementById("hfUnit").value=h&&h.unit?h.unit:"";
     document.getElementById("hfPart").value=h&&h.part?h.part:"体幹";
+    document.getElementById("hfStep1").value=h&&h.step1?h.step1:"";
+    document.getElementById("hfStep2").value=h&&h.step2?h.step2:"";
     document.getElementById("habitForm").style.display="block";
     document.getElementById("addHabitBtn").style.display="none";
     document.getElementById("hfName").focus();
@@ -718,11 +736,14 @@
     const name=document.getElementById("hfName").value.trim();
     const target=parseInt(document.getElementById("hfTarget").value,10);
     const part=document.getElementById("hfPart").value;
+    const unit=document.getElementById("hfUnit").value.trim()||"回";
+    const step1=parseInt(document.getElementById("hfStep1").value,10)||1;
+    const step2=parseInt(document.getElementById("hfStep2").value,10)||10;
     if(!name){toast("種目名を入力してください");return;}
-    if(!(target>0)){toast("目標回数を入力してください");return;}
+    if(!(target>0)){toast("目標を入力してください");return;}
     const isEdit=!!editingHabit;
-    if(isEdit){editingHabit.name=name;editingHabit.target=target;editingHabit.part=part;}
-    else dailyHabits.push({id:uid(),name,target,part});
+    if(isEdit){editingHabit.name=name;editingHabit.target=target;editingHabit.part=part;editingHabit.unit=unit;editingHabit.step1=step1;editingHabit.step2=step2;}
+    else dailyHabits.push({id:uid(),name,target,part,unit,step1,step2});
     saveDaily();closeHabitForm();renderDaily();toast(isEdit?"更新しました":"追加しました");
   };
 
