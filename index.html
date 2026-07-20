@@ -2,6 +2,16 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
+<script>
+(function(){
+  try{
+    if(window.navigator.standalone && !sessionStorage.getItem("kintore_fresh")){
+      sessionStorage.setItem("kintore_fresh","1");
+      location.replace(location.pathname + "?_=" + Date.now());
+    }
+  }catch(e){}
+})();
+</script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
