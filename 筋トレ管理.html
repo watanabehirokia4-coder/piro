@@ -631,6 +631,11 @@
     saveDaily();
     localStorage.setItem("kintore_water_init","1");
   }
+  if(!localStorage.getItem("kintore_protein_init")){
+    dailyHabits.push({id:uid(),name:"プロテイン",target:2,part:"水分",unit:"杯",step1:1,step2:2});
+    saveDaily();
+    localStorage.setItem("kintore_protein_init","1");
+  }
   const dstr=d=>d.getFullYear()+"-"+p2(d.getMonth()+1)+"-"+p2(d.getDate());
   // roll finished days' quota into the training log (JST midnight, or next open)
   const FLUSHKEY="kintore_daily_flushed";
