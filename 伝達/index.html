@@ -119,6 +119,8 @@
   .cal-wd{text-align:center; font-size:11px; color:var(--sub); font-weight:600; padding-bottom:4px;}
   .cal-day{position:relative; aspect-ratio:1; display:flex; align-items:center; justify-content:center; border-radius:10px; font-size:13.5px; cursor:pointer; background:var(--card2); color:var(--text);}
   .cal-day.blank{visibility:hidden; cursor:default;}
+  .cal-day.has-entry{background:#fbe4d5; font-weight:700;}
+  .cal-day.has-entry.unread{background:#fbdad5;}
   .cal-day.today{box-shadow:inset 0 0 0 1.5px var(--accent);}
   .cal-day.selected{background:var(--accent); color:#fff; font-weight:700;}
   .cal-day .dot{position:absolute; bottom:4px; width:5px; height:5px; border-radius:50%; background:var(--green);}
@@ -142,24 +144,13 @@
 
 <main>
 
-  <!-- 日次伝達 -->
+  <!-- 今日の伝達 -->
   <section class="view active" id="view-daily">
     <div class="card">
-      <div class="row between" style="margin-bottom:12px;">
-        <button class="icon-btn" id="dayPrev">◀</button>
-        <div style="text-align:center; flex:1;">
-          <div id="dayLabel" style="font-size:16px; font-weight:700;"></div>
-        </div>
-        <button class="icon-btn" id="dayNext">▶</button>
-      </div>
-      <div class="row" style="margin-bottom:4px;">
-        <input type="date" id="dayPicker" style="flex:1;">
-        <button class="btn ghost sm" id="dayToday">今日</button>
-      </div>
-    </div>
-
-    <div class="card">
-      <div class="readbox" id="readBox">
+      <h2>今日の伝達</h2>
+      <div id="todayLabel" style="font-size:15px; font-weight:700; margin-bottom:12px; color:var(--sub);"></div>
+      <div id="todayList"></div>
+      <div class="readbox" id="readBox" style="margin-top:12px;">
         <div class="box" id="readBoxIcon"></div>
         <div>
           <div class="lbl" id="readBoxLabel">朝番:未読</div>
@@ -169,13 +160,7 @@
     </div>
 
     <div class="card">
-      <h2>この日の伝達</h2>
-      <div id="dailyList"></div>
-      <textarea id="dailyInput" placeholder="予約内容・両替の有無など&#10;（この日付に向けて誰でも記入できます）"></textarea>
-      <button class="btn block" id="dailyAdd" style="margin-top:10px;">追記する</button>
-    </div>
-
-    <div class="card">
+      <h2>伝達を残す</h2>
       <div class="cal-head">
         <button class="icon-btn" id="calPrev">◀</button>
         <span class="label" id="calLabel"></span>
@@ -183,6 +168,14 @@
       </div>
       <div class="cal-grid" id="calWeekdays"></div>
       <div class="cal-grid" id="calGrid" style="margin-top:5px;"></div>
+
+      <div class="row between" style="margin-top:16px; margin-bottom:10px;">
+        <div id="writeLabel" style="font-size:15px; font-weight:700;"></div>
+        <button class="btn ghost sm" id="writeToday">今日を選択</button>
+      </div>
+      <div id="dailyList"></div>
+      <textarea id="dailyInput" placeholder="予約内容・両替の有無など&#10;（選んだ日付に向けて誰でも記入できます）"></textarea>
+      <button class="btn block" id="dailyAdd" style="margin-top:10px;">追記する</button>
     </div>
   </section>
 
@@ -256,7 +249,7 @@
 </main>
 
 <nav class="tabs">
-  <button class="active" data-view="daily"><span class="ico">📅</span>日次伝達</button>
+  <button class="active" data-view="daily"><span class="ico">📅</span>今日の伝達</button>
   <button data-view="general"><span class="ico">📢</span>全体伝達</button>
   <button data-view="personal"><span class="ico">👤</span>個人伝達</button>
   <button data-view="staff"><span class="ico">⚙️</span>スタッフ</button>
@@ -314,7 +307,7 @@
 
   // ---------- header ----------
   function renderHeader(view){
-    const titles={daily:"その日の伝達",general:"全体伝達",personal:"個人伝達",staff:"スタッフ管理"};
+    const titles={daily:"今日の伝達",general:"全体伝達",personal:"個人伝達",staff:"スタッフ管理"};
     document.getElementById("headerTitle").textContent=titles[view]||"";
     document.getElementById("headerDate").textContent=fmtDate(todayStr());
   }
@@ -331,7 +324,7 @@
   }
   document.querySelectorAll("nav.tabs button").forEach(b=>b.onclick=()=>switchView(b.dataset.view));
 
-  // ---------- 日次伝達 ----------
+  // ---------- 今日の伝達 / 伝達を残す ----------
   function dayEntry(dateStr){
     if(!daily[dateStr]) daily[dateStr]={memos:[],read:false,readAt:null};
     return daily[dateStr];
@@ -341,15 +334,20 @@
     currentDay=d;
     calYear=Number(d.slice(0,4));
     calMonth=Number(d.slice(5,7))-1;
-    renderDaily();
+    renderCalendar();
+    renderWriteSection();
   }
 
   function renderDaily(){
-    document.getElementById("dayPicker").value=currentDay;
-    const isToday=currentDay===todayStr();
-    document.getElementById("dayLabel").textContent=fmtDate(currentDay)+(isToday?"（今日）":"");
+    renderTodayCard();
+    renderCalendar();
+    renderWriteSection();
+  }
 
-    const entry=dayEntry(currentDay);
+  function renderTodayCard(){
+    const today=todayStr();
+    document.getElementById("todayLabel").textContent=fmtDate(today);
+    const entry=dayEntry(today);
 
     const box=document.getElementById("readBox");
     box.classList.toggle("done",entry.read);
@@ -359,6 +357,33 @@
       ? (entry.readAt?fmtDateTime(entry.readAt)+" に既読":"既読にしました")
       : "タップで既読にする";
 
+    const list=document.getElementById("todayList");
+    if(!entry.memos.length){
+      list.innerHTML=`<div class="empty">今日の伝達はまだありません</div>`;
+    }else{
+      list.innerHTML=entry.memos.map(m=>`
+        <div class="memo-item">
+          <div class="meta"><span>${fmtDateTime(m.createdAt)}</span></div>
+          <div class="txt">${escapeHtml(m.text)}</div>
+        </div>
+      `).join("");
+    }
+  }
+
+  document.getElementById("readBox").onclick=()=>{
+    const entry=dayEntry(todayStr());
+    entry.read=!entry.read;
+    entry.readAt=entry.read?Date.now():null;
+    saveDaily();
+    renderTodayCard();
+    renderCalendar();
+  };
+
+  function renderWriteSection(){
+    const isToday=currentDay===todayStr();
+    document.getElementById("writeLabel").textContent=fmtDate(currentDay)+(isToday?"（今日）":"");
+
+    const entry=dayEntry(currentDay);
     const list=document.getElementById("dailyList");
     if(!entry.memos.length){
       list.innerHTML=`<div class="empty">この日の伝達はまだありません</div>`;
@@ -373,12 +398,11 @@
         btn.onclick=()=>{
           entry.memos=entry.memos.filter(m=>m.id!==btn.dataset.id);
           saveDaily();
-          renderDaily();
+          renderWriteSection();
+          renderCalendar();
         };
       });
     }
-
-    renderCalendar();
   }
 
   function renderCalendar(){
@@ -397,6 +421,7 @@
       const hasMemo=e&&e.memos.length;
       const unread=hasMemo&&!e.read;
       const cls=["cal-day"];
+      if(hasMemo) cls.push("has-entry");
       if(dateStr===todayStr()) cls.push("today");
       if(dateStr===currentDay) cls.push("selected");
       if(unread) cls.push("unread");
@@ -408,10 +433,7 @@
     });
   }
 
-  document.getElementById("dayPrev").onclick=()=>setCurrentDay(addDays(currentDay,-1));
-  document.getElementById("dayNext").onclick=()=>setCurrentDay(addDays(currentDay,1));
-  document.getElementById("dayToday").onclick=()=>setCurrentDay(todayStr());
-  document.getElementById("dayPicker").onchange=e=>{if(e.target.value) setCurrentDay(e.target.value);};
+  document.getElementById("writeToday").onclick=()=>setCurrentDay(todayStr());
 
   document.getElementById("calPrev").onclick=()=>{
     calMonth--; if(calMonth<0){calMonth=11;calYear--;}
@@ -422,14 +444,6 @@
     renderCalendar();
   };
 
-  document.getElementById("readBox").onclick=()=>{
-    const entry=dayEntry(currentDay);
-    entry.read=!entry.read;
-    entry.readAt=entry.read?Date.now():null;
-    saveDaily();
-    renderDaily();
-  };
-
   document.getElementById("dailyAdd").onclick=()=>{
     const ta=document.getElementById("dailyInput");
     const text=ta.value.trim();
@@ -438,7 +452,9 @@
     entry.memos.push({id:uid(),text,createdAt:Date.now()});
     ta.value="";
     saveDaily();
-    renderDaily();
+    renderWriteSection();
+    renderCalendar();
+    if(currentDay===todayStr()) renderTodayCard();
     toast("記入しました");
   };
 
@@ -538,16 +554,21 @@
     const fromSel=document.getElementById("perFrom");
     const toSel=document.getElementById("perTo");
     const filterSel=document.getElementById("perFilter");
-    const prevFilter=filterSel.value||"__all__";
+    const prevFilter=filterSel.value||"";
 
     fromSel.innerHTML=staffOptionsHtml();
     toSel.innerHTML=staffOptionsHtml();
-    filterSel.innerHTML=`<option value="__all__">すべて</option>`+staff.map(n=>`<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join("");
-    filterSel.value=staff.includes(prevFilter)||prevFilter==="__all__" ? prevFilter : "__all__";
+    filterSel.innerHTML=`<option value="">宛先を選択</option>`+staff.map(n=>`<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join("");
+    filterSel.value=staff.includes(prevFilter) ? prevFilter : "";
 
     const list=document.getElementById("perList");
-    let items=[...personal].sort((a,b)=>b.createdAt-a.createdAt);
-    if(filterSel.value!=="__all__") items=items.filter(p=>p.to===filterSel.value);
+
+    if(!filterSel.value){
+      list.innerHTML=`<div class="empty">宛先を選んでください</div>`;
+      return;
+    }
+
+    let items=[...personal].sort((a,b)=>b.createdAt-a.createdAt).filter(p=>p.to===filterSel.value);
 
     if(!items.length){
       list.innerHTML=`<div class="empty">該当する伝達がありません</div>`;
