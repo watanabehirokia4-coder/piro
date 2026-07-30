@@ -1,0 +1,583 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<script>
+(function(){
+  try{
+    if(window.navigator.standalone && !sessionStorage.getItem("tsutae_fresh")){
+      sessionStorage.setItem("tsutae_fresh","1");
+      location.replace(location.pathname + "?_=" + Date.now());
+    }
+  }catch(e){}
+})();
+</script>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="伝達">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<title>🥧 伝達</title>
+<style>
+  :root{
+    --bg:#0f1115; --card:#1a1d24; --card2:#22262f; --card3:#2a2f3a; --line:#2c313c;
+    --text:#e8eaed; --sub:#9aa2b1; --accent:#e8813a; --accent2:#c8622a;
+    --green:#37c871; --orange:#ff9f43; --red:#ff5c5c; --purple:#a879ff;
+    --radius:14px; --shadow:0 4px 20px rgba(0,0,0,.35);
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{margin:0; padding:0;}
+  body{
+    background:var(--bg); color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Segoe UI",Roboto,sans-serif;
+    padding:0 0 92px; min-height:100vh; line-height:1.5;
+  }
+  header{
+    position:sticky; top:0; z-index:20; background:rgba(15,17,21,.85);
+    backdrop-filter:blur(12px); border-bottom:1px solid var(--line);
+    padding:14px 16px; padding-top:calc(14px + env(safe-area-inset-top,0));
+    display:flex; align-items:center; justify-content:space-between;
+  }
+  header h1{font-size:19px; margin:0; font-weight:700; letter-spacing:.02em; display:flex; align-items:center; gap:8px;}
+  header .date-badge{font-size:13px; color:var(--sub);}
+  main{max-width:660px; margin:0 auto; padding:16px;}
+  .view{display:none;}
+  .view.active{display:block;}
+  .card{background:var(--card); border:1px solid var(--line); border-radius:var(--radius); padding:16px; margin-bottom:16px; box-shadow:var(--shadow);}
+  .card h2{font-size:15px; margin:0 0 14px; color:var(--sub); font-weight:600; letter-spacing:.04em; display:flex; align-items:center; justify-content:space-between;}
+
+  input,select,textarea,button{font-family:inherit;}
+  input,select,textarea{
+    background:var(--card2); border:1px solid var(--line); color:var(--text);
+    border-radius:10px; padding:10px 11px; font-size:16px; outline:none; width:100%;
+  }
+  input:focus,select:focus,textarea:focus{border-color:var(--accent);}
+  textarea{resize:vertical; min-height:70px;}
+
+  .btn{background:var(--accent); color:#fff; border:none; border-radius:11px; padding:11px 16px; font-size:15px; font-weight:700; cursor:pointer;}
+  .btn:active{background:var(--accent2);}
+  .btn.ghost{background:transparent; border:1px solid var(--line); color:var(--text);}
+  .btn.block{width:100%;}
+  .btn.sm{padding:7px 12px; font-size:13px; border-radius:9px;}
+  .btn.danger{background:transparent; border:1px solid var(--red); color:var(--red);}
+
+  .row{display:flex; gap:10px; align-items:center;}
+  .row.between{justify-content:space-between;}
+  .row.wrap{flex-wrap:wrap;}
+
+  .icon-btn{background:none; border:none; color:var(--sub); font-size:18px; cursor:pointer; padding:6px 10px; border-radius:8px; flex-shrink:0;}
+  .icon-btn:active{background:var(--card3); color:var(--text);}
+
+  .chips{display:flex; flex-wrap:wrap; gap:7px;}
+  .chip{padding:7px 13px; border-radius:18px; border:1px solid var(--line); background:var(--card3); font-size:13px; cursor:pointer; user-select:none; transition:.1s; color:var(--text);}
+  .chip.active{background:var(--accent); border-color:var(--accent); color:#fff; font-weight:700;}
+  .chip .mark{margin-right:4px;}
+
+  .memo-item{background:var(--card2); border:1px solid var(--line); border-radius:11px; padding:11px 12px; margin-bottom:9px;}
+  .memo-item .meta{font-size:11px; color:var(--sub); margin-bottom:5px; display:flex; justify-content:space-between; align-items:center;}
+  .memo-item .txt{white-space:pre-wrap; font-size:14.5px; word-break:break-word;}
+  .memo-item .del{color:var(--sub); background:none; border:none; font-size:13px; cursor:pointer; padding:2px 4px;}
+  .memo-item .del:active{color:var(--red);}
+
+  .empty{color:var(--sub); font-size:13.5px; text-align:center; padding:22px 10px;}
+
+  .subject-row{background:var(--card2); border:1px solid var(--line); border-radius:11px; padding:12px 13px; margin-bottom:9px; cursor:pointer;}
+  .subject-row:active{background:var(--card3);}
+  .subject-row .subj{font-size:15px; font-weight:700; margin-bottom:4px;}
+  .subject-row .sub-meta{font-size:12px; color:var(--sub); display:flex; justify-content:space-between;}
+  .seen-badge{font-size:11px; padding:2px 8px; border-radius:10px; background:var(--card3); color:var(--sub);}
+  .seen-badge.full{color:var(--green);}
+
+  .readbox{display:flex; align-items:center; gap:10px; background:var(--card2); border:1px solid var(--line); border-radius:11px; padding:13px; cursor:pointer;}
+  .readbox .box{width:24px; height:24px; border-radius:7px; border:2px solid var(--sub); flex-shrink:0; display:flex; align-items:center; justify-content:center; font-size:15px;}
+  .readbox.done{border-color:var(--green);}
+  .readbox.done .box{border-color:var(--green); background:var(--green); color:#0f1115;}
+  .readbox .lbl{font-size:14px; font-weight:600;}
+  .readbox .sub{font-size:12px; color:var(--sub); margin-top:2px;}
+
+  .personal-item{background:var(--card2); border:1px solid var(--line); border-radius:11px; padding:11px 12px; margin-bottom:9px; display:flex; gap:10px; align-items:flex-start;}
+  .personal-item .box{width:24px; height:24px; border-radius:7px; border:2px solid var(--sub); flex-shrink:0; display:flex; align-items:center; justify-content:center; font-size:15px; cursor:pointer; margin-top:1px;}
+  .personal-item.read .box{border-color:var(--green); background:var(--green); color:#0f1115;}
+  .personal-item .body{flex:1; min-width:0;}
+  .personal-item .to{font-size:12px; color:var(--accent); font-weight:700; margin-bottom:3px;}
+  .personal-item .txt{font-size:14.5px; white-space:pre-wrap; word-break:break-word;}
+  .personal-item .meta{font-size:11px; color:var(--sub); margin-top:5px; display:flex; justify-content:space-between;}
+  .personal-item .del{color:var(--sub); background:none; border:none; font-size:13px; cursor:pointer; padding:2px 4px;}
+  .personal-item .del:active{color:var(--red);}
+
+  .staff-item{display:flex; align-items:center; justify-content:space-between; background:var(--card2); border:1px solid var(--line); border-radius:11px; padding:11px 13px; margin-bottom:8px;}
+  .staff-item .name{font-size:15px; font-weight:600;}
+
+  .backbar{display:flex; align-items:center; gap:8px; margin-bottom:14px;}
+  .backbar .btn.ghost{padding:8px 14px;}
+  .detail-content{white-space:pre-wrap; font-size:15px; margin-bottom:16px; line-height:1.7;}
+
+  nav.tabs{position:fixed; bottom:0; left:0; right:0; z-index:30; background:rgba(20,23,29,.95); backdrop-filter:blur(12px); border-top:1px solid var(--line); display:flex; padding-bottom:env(safe-area-inset-bottom,0);}
+  nav.tabs button{flex:1; background:none; border:none; color:var(--sub); padding:10px 0 11px; cursor:pointer; font-size:11px; font-family:inherit; display:flex; flex-direction:column; align-items:center; gap:3px;}
+  nav.tabs button .ico{font-size:20px;}
+  nav.tabs button.active{color:var(--accent);}
+
+  .toast{position:fixed; left:50%; bottom:100px; transform:translateX(-50%) translateY(20px); background:#2a2f3a; color:var(--text); padding:11px 18px; border-radius:11px; font-size:13.5px; box-shadow:var(--shadow); opacity:0; pointer-events:none; transition:.25s; z-index:50;}
+  .toast.show{opacity:1; transform:translateX(-50%) translateY(0);}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🥧 <span id="headerTitle">その日の伝達</span></h1>
+  <span class="date-badge" id="headerDate"></span>
+</header>
+
+<main>
+
+  <!-- 日次伝達 -->
+  <section class="view active" id="view-daily">
+    <div class="card">
+      <div class="row between" style="margin-bottom:12px;">
+        <button class="icon-btn" id="dayPrev">◀</button>
+        <div style="text-align:center; flex:1;">
+          <div id="dayLabel" style="font-size:16px; font-weight:700;"></div>
+        </div>
+        <button class="icon-btn" id="dayNext">▶</button>
+      </div>
+      <div class="row" style="margin-bottom:4px;">
+        <input type="date" id="dayPicker" style="flex:1;">
+        <button class="btn ghost sm" id="dayToday">今日</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="readbox" id="readBox">
+        <div class="box" id="readBoxIcon"></div>
+        <div>
+          <div class="lbl" id="readBoxLabel">朝番:未読</div>
+          <div class="sub" id="readBoxSub">タップで既読にする</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>この日の伝達</h2>
+      <div id="dailyList"></div>
+      <textarea id="dailyInput" placeholder="予約内容・両替の有無など&#10;（この日付に向けて誰でも記入できます）"></textarea>
+      <button class="btn block" id="dailyAdd" style="margin-top:10px;">追記する</button>
+    </div>
+
+    <div class="card">
+      <h2>記入のある日付</h2>
+      <div class="chips" id="dayChips"></div>
+    </div>
+  </section>
+
+  <!-- 全体伝達 -->
+  <section class="view" id="view-general">
+    <div id="generalListView">
+      <div class="card">
+        <h2>新規作成</h2>
+        <input type="text" id="genSubject" placeholder="件名" style="margin-bottom:8px;">
+        <textarea id="genContent" placeholder="内容"></textarea>
+        <button class="btn block" id="genAdd" style="margin-top:10px;">作成する</button>
+      </div>
+      <div class="card">
+        <h2>件名一覧</h2>
+        <div id="genList"></div>
+      </div>
+    </div>
+
+    <div id="generalDetailView" style="display:none;">
+      <div class="backbar">
+        <button class="btn ghost sm" id="genBack">◀ 一覧へ</button>
+        <button class="btn danger sm" id="genDelete" style="margin-left:auto;">削除</button>
+      </div>
+      <div class="card">
+        <h2 id="genDetailSubject" style="font-size:18px; color:var(--text);"></h2>
+        <div class="detail-content" id="genDetailContent"></div>
+        <div style="font-size:12px; color:var(--sub); margin-bottom:14px;" id="genDetailMeta"></div>
+        <h2>見た人（自分の名前をタップ）</h2>
+        <div class="chips" id="genSeenChips"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 個人伝達 -->
+  <section class="view" id="view-personal">
+    <div class="card">
+      <h2>新規作成</h2>
+      <select id="perTo" style="margin-bottom:8px;"></select>
+      <textarea id="perText" placeholder="一言メモ"></textarea>
+      <button class="btn block" id="perAdd" style="margin-top:10px;">送る</button>
+    </div>
+    <div class="card">
+      <h2>
+        伝達一覧
+        <select id="perFilter" style="width:auto; padding:6px 10px; font-size:13px;"></select>
+      </h2>
+      <div id="perList"></div>
+    </div>
+  </section>
+
+  <!-- スタッフ管理 -->
+  <section class="view" id="view-staff">
+    <div class="card">
+      <h2>スタッフ追加</h2>
+      <div class="row">
+        <input type="text" id="staffInput" placeholder="名前">
+        <button class="btn sm" id="staffAdd">追加</button>
+      </div>
+    </div>
+    <div class="card">
+      <h2>スタッフ一覧</h2>
+      <div id="staffList"></div>
+    </div>
+  </section>
+
+</main>
+
+<nav class="tabs">
+  <button class="active" data-view="daily"><span class="ico">📅</span>日次伝達</button>
+  <button data-view="general"><span class="ico">📢</span>全体伝達</button>
+  <button data-view="personal"><span class="ico">👤</span>個人伝達</button>
+  <button data-view="staff"><span class="ico">⚙️</span>スタッフ</button>
+</nav>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(function(){
+  "use strict";
+  const STAFF_KEY="tsutae_staff_v1";
+  const DAILY_KEY="tsutae_daily_v1";
+  const GENERAL_KEY="tsutae_general_v1";
+  const PERSONAL_KEY="tsutae_personal_v1";
+
+  const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+  const p2=n=>String(n).padStart(2,"0");
+  function jstNow(){const n=new Date();return new Date(n.getTime()+n.getTimezoneOffset()*60000+9*3600000);}
+  function todayStr(){const d=jstNow();return d.getFullYear()+"-"+p2(d.getMonth()+1)+"-"+p2(d.getDate());}
+  function addDays(dateStr,n){const[y,m,d]=dateStr.split("-").map(Number);const dt=new Date(y,m-1,d);dt.setDate(dt.getDate()+n);return dt.getFullYear()+"-"+p2(dt.getMonth()+1)+"-"+p2(dt.getDate());}
+  function fmtDate(s){const[y,m,d]=s.split("-").map(Number);const wd=["日","月","火","水","木","金","土"][new Date(y,m-1,d).getDay()];return `${y}年${m}月${d}日 (${wd})`;}
+  function fmtDateTime(ts){const d=new Date(ts);const jd=new Date(d.getTime()+d.getTimezoneOffset()*60000+9*3600000);return `${jd.getMonth()+1}/${jd.getDate()} ${p2(jd.getHours())}:${p2(jd.getMinutes())}`;}
+  function escapeHtml(s){return String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
+  function loadJSON(k,d){try{const v=JSON.parse(localStorage.getItem(k));return v==null?d:v;}catch(e){return d;}}
+  function saveJSON(k,v){localStorage.setItem(k,JSON.stringify(v));}
+
+  let staff=loadJSON(STAFF_KEY,[]);
+  let daily=loadJSON(DAILY_KEY,{});
+  let general=loadJSON(GENERAL_KEY,[]);
+  let personal=loadJSON(PERSONAL_KEY,[]);
+
+  let currentDay=todayStr();
+  let openGeneralId=null;
+
+  function saveStaff(){saveJSON(STAFF_KEY,staff);}
+  function saveDaily(){saveJSON(DAILY_KEY,daily);}
+  function saveGeneral(){saveJSON(GENERAL_KEY,general);}
+  function savePersonal(){saveJSON(PERSONAL_KEY,personal);}
+
+  function toast(msg){
+    const t=document.getElementById("toast");
+    t.textContent=msg;
+    t.classList.add("show");
+    clearTimeout(toast._t);
+    toast._t=setTimeout(()=>t.classList.remove("show"),1600);
+  }
+
+  // ---------- header ----------
+  function renderHeader(view){
+    const titles={daily:"その日の伝達",general:"全体伝達",personal:"個人伝達",staff:"スタッフ管理"};
+    document.getElementById("headerTitle").textContent=titles[view]||"";
+    document.getElementById("headerDate").textContent=fmtDate(todayStr());
+  }
+
+  // ---------- tab switching ----------
+  function switchView(v){
+    document.querySelectorAll(".view").forEach(el=>el.classList.toggle("active",el.id==="view-"+v));
+    document.querySelectorAll("nav.tabs button").forEach(b=>b.classList.toggle("active",b.dataset.view===v));
+    renderHeader(v);
+    if(v==="daily") renderDaily();
+    if(v==="general") renderGeneralList();
+    if(v==="personal") renderPersonal();
+    if(v==="staff") renderStaff();
+  }
+  document.querySelectorAll("nav.tabs button").forEach(b=>b.onclick=()=>switchView(b.dataset.view));
+
+  // ---------- 日次伝達 ----------
+  function dayEntry(dateStr){
+    if(!daily[dateStr]) daily[dateStr]={memos:[],read:false,readAt:null};
+    return daily[dateStr];
+  }
+
+  function renderDaily(){
+    document.getElementById("dayPicker").value=currentDay;
+    const isToday=currentDay===todayStr();
+    document.getElementById("dayLabel").textContent=fmtDate(currentDay)+(isToday?"（今日）":"");
+
+    const entry=dayEntry(currentDay);
+
+    const box=document.getElementById("readBox");
+    box.classList.toggle("done",entry.read);
+    document.getElementById("readBoxIcon").textContent=entry.read?"✓":"";
+    document.getElementById("readBoxLabel").textContent=entry.read?"朝番:既読":"朝番:未読";
+    document.getElementById("readBoxSub").textContent=entry.read
+      ? (entry.readAt?fmtDateTime(entry.readAt)+" に既読":"既読にしました")
+      : "タップで既読にする";
+
+    const list=document.getElementById("dailyList");
+    if(!entry.memos.length){
+      list.innerHTML=`<div class="empty">この日の伝達はまだありません</div>`;
+    }else{
+      list.innerHTML=entry.memos.map(m=>`
+        <div class="memo-item">
+          <div class="meta"><span>${fmtDateTime(m.createdAt)}</span><button class="del" data-id="${m.id}">削除</button></div>
+          <div class="txt">${escapeHtml(m.text)}</div>
+        </div>
+      `).join("");
+      list.querySelectorAll(".del").forEach(btn=>{
+        btn.onclick=()=>{
+          entry.memos=entry.memos.filter(m=>m.id!==btn.dataset.id);
+          saveDaily();
+          renderDaily();
+        };
+      });
+    }
+
+    // date chips: today ±3 days plus any other dates that already have memos
+    const dateSet=new Set();
+    for(let i=-3;i<=3;i++) dateSet.add(addDays(todayStr(),i));
+    Object.keys(daily).forEach(d=>{ if(daily[d].memos.length) dateSet.add(d); });
+    const dates=Array.from(dateSet).sort();
+    const chips=document.getElementById("dayChips");
+    if(!dates.length){
+      chips.innerHTML=`<div class="empty">まだ記入がありません</div>`;
+    }else{
+      chips.innerHTML=dates.map(d=>{
+        const e=daily[d];
+        const hasMemo=e&&e.memos.length;
+        const unread=hasMemo&&!e.read;
+        const active=d===currentDay;
+        const label=(d===todayStr()?"今日 ":"")+fmtDate(d).replace(/^\d+年/,"");
+        return `<div class="chip ${active?"active":""}" data-date="${d}">${unread?'<span class="mark">🔴</span>':""}${label}</div>`;
+      }).join("");
+      chips.querySelectorAll(".chip").forEach(c=>{
+        c.onclick=()=>{ currentDay=c.dataset.date; renderDaily(); };
+      });
+    }
+  }
+
+  document.getElementById("dayPrev").onclick=()=>{currentDay=addDays(currentDay,-1);renderDaily();};
+  document.getElementById("dayNext").onclick=()=>{currentDay=addDays(currentDay,1);renderDaily();};
+  document.getElementById("dayToday").onclick=()=>{currentDay=todayStr();renderDaily();};
+  document.getElementById("dayPicker").onchange=e=>{if(e.target.value){currentDay=e.target.value;renderDaily();}};
+
+  document.getElementById("readBox").onclick=()=>{
+    const entry=dayEntry(currentDay);
+    entry.read=!entry.read;
+    entry.readAt=entry.read?Date.now():null;
+    saveDaily();
+    renderDaily();
+  };
+
+  document.getElementById("dailyAdd").onclick=()=>{
+    const ta=document.getElementById("dailyInput");
+    const text=ta.value.trim();
+    if(!text) return;
+    const entry=dayEntry(currentDay);
+    entry.memos.push({id:uid(),text,createdAt:Date.now()});
+    ta.value="";
+    saveDaily();
+    renderDaily();
+    toast("記入しました");
+  };
+
+  // ---------- 全体伝達 ----------
+  function renderGeneralList(){
+    document.getElementById("generalListView").style.display="";
+    document.getElementById("generalDetailView").style.display="none";
+    const list=document.getElementById("genList");
+    if(!general.length){
+      list.innerHTML=`<div class="empty">まだ伝達がありません</div>`;
+      return;
+    }
+    const sorted=[...general].sort((a,b)=>b.createdAt-a.createdAt);
+    list.innerHTML=sorted.map(g=>{
+      const total=staff.length;
+      const seen=g.seenBy.length;
+      const full=total>0&&seen>=total;
+      return `
+        <div class="subject-row" data-id="${g.id}">
+          <div class="subj">${escapeHtml(g.subject)||"(件名なし)"}</div>
+          <div class="sub-meta">
+            <span>${fmtDateTime(g.createdAt)}</span>
+            <span class="seen-badge ${full?"full":""}">既読 ${seen}/${total}</span>
+          </div>
+        </div>
+      `;
+    }).join("");
+    list.querySelectorAll(".subject-row").forEach(row=>{
+      row.onclick=()=>openGeneralDetail(row.dataset.id);
+    });
+  }
+
+  function openGeneralDetail(id){
+    openGeneralId=id;
+    document.getElementById("generalListView").style.display="none";
+    document.getElementById("generalDetailView").style.display="";
+    renderGeneralDetail();
+  }
+
+  function renderGeneralDetail(){
+    const g=general.find(x=>x.id===openGeneralId);
+    if(!g){ renderGeneralList(); return; }
+    document.getElementById("genDetailSubject").textContent=g.subject||"(件名なし)";
+    document.getElementById("genDetailContent").textContent=g.content;
+    document.getElementById("genDetailMeta").textContent=fmtDateTime(g.createdAt)+" 作成";
+    const chips=document.getElementById("genSeenChips");
+    if(!staff.length){
+      chips.innerHTML=`<div class="empty">スタッフ管理タブで名前を追加してください</div>`;
+    }else{
+      chips.innerHTML=staff.map(name=>{
+        const active=g.seenBy.includes(name);
+        return `<div class="chip ${active?"active":""}" data-name="${escapeHtml(name)}">${active?'<span class="mark">✓</span>':""}${escapeHtml(name)}</div>`;
+      }).join("");
+      chips.querySelectorAll(".chip").forEach(c=>{
+        c.onclick=()=>{
+          const name=c.dataset.name;
+          const idx=g.seenBy.indexOf(name);
+          if(idx===-1) g.seenBy.push(name); else g.seenBy.splice(idx,1);
+          saveGeneral();
+          renderGeneralDetail();
+        };
+      });
+    }
+  }
+
+  document.getElementById("genAdd").onclick=()=>{
+    const subjEl=document.getElementById("genSubject");
+    const contEl=document.getElementById("genContent");
+    const subject=subjEl.value.trim();
+    const content=contEl.value.trim();
+    if(!content) return;
+    general.push({id:uid(),subject,content,createdAt:Date.now(),seenBy:[]});
+    subjEl.value="";
+    contEl.value="";
+    saveGeneral();
+    renderGeneralList();
+    toast("作成しました");
+  };
+
+  document.getElementById("genBack").onclick=()=>{ openGeneralId=null; renderGeneralList(); };
+  document.getElementById("genDelete").onclick=()=>{
+    if(!confirm("この伝達を削除しますか？")) return;
+    general=general.filter(g=>g.id!==openGeneralId);
+    saveGeneral();
+    openGeneralId=null;
+    renderGeneralList();
+  };
+
+  // ---------- 個人伝達 ----------
+  function renderPersonal(){
+    const toSel=document.getElementById("perTo");
+    const filterSel=document.getElementById("perFilter");
+    const prevFilter=filterSel.value||"__all__";
+
+    if(!staff.length){
+      toSel.innerHTML=`<option value="">スタッフを追加してください</option>`;
+    }else{
+      toSel.innerHTML=staff.map(n=>`<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join("");
+    }
+    filterSel.innerHTML=`<option value="__all__">すべて</option>`+staff.map(n=>`<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join("");
+    filterSel.value=staff.includes(prevFilter)||prevFilter==="__all__" ? prevFilter : "__all__";
+
+    const list=document.getElementById("perList");
+    let items=[...personal].sort((a,b)=>b.createdAt-a.createdAt);
+    if(filterSel.value!=="__all__") items=items.filter(p=>p.to===filterSel.value);
+
+    if(!items.length){
+      list.innerHTML=`<div class="empty">該当する伝達がありません</div>`;
+      return;
+    }
+    list.innerHTML=items.map(p=>`
+      <div class="personal-item ${p.read?"read":""}" data-id="${p.id}">
+        <div class="box" data-toggle="${p.id}">${p.read?"✓":""}</div>
+        <div class="body">
+          <div class="to">宛先: ${escapeHtml(p.to)}</div>
+          <div class="txt">${escapeHtml(p.text)}</div>
+          <div class="meta"><span>${fmtDateTime(p.createdAt)}</span><button class="del" data-id="${p.id}">削除</button></div>
+        </div>
+      </div>
+    `).join("");
+    list.querySelectorAll("[data-toggle]").forEach(el=>{
+      el.onclick=()=>{
+        const item=personal.find(p=>p.id===el.dataset.toggle);
+        item.read=!item.read;
+        item.readAt=item.read?Date.now():null;
+        savePersonal();
+        renderPersonal();
+      };
+    });
+    list.querySelectorAll(".del").forEach(btn=>{
+      btn.onclick=()=>{
+        personal=personal.filter(p=>p.id!==btn.dataset.id);
+        savePersonal();
+        renderPersonal();
+      };
+    });
+  }
+
+  document.getElementById("perFilter").onchange=renderPersonal;
+
+  document.getElementById("perAdd").onclick=()=>{
+    const toSel=document.getElementById("perTo");
+    const textEl=document.getElementById("perText");
+    const to=toSel.value;
+    const text=textEl.value.trim();
+    if(!to||!text) return;
+    personal.push({id:uid(),to,text,createdAt:Date.now(),read:false,readAt:null});
+    textEl.value="";
+    savePersonal();
+    renderPersonal();
+    toast("送りました");
+  };
+
+  // ---------- スタッフ管理 ----------
+  function renderStaff(){
+    const list=document.getElementById("staffList");
+    if(!staff.length){
+      list.innerHTML=`<div class="empty">スタッフが登録されていません</div>`;
+      return;
+    }
+    list.innerHTML=staff.map(n=>`
+      <div class="staff-item">
+        <span class="name">${escapeHtml(n)}</span>
+        <button class="btn danger sm" data-name="${escapeHtml(n)}">削除</button>
+      </div>
+    `).join("");
+    list.querySelectorAll("button[data-name]").forEach(btn=>{
+      btn.onclick=()=>{
+        const name=btn.dataset.name;
+        if(!confirm(`「${name}」を削除しますか？`)) return;
+        staff=staff.filter(n=>n!==name);
+        saveStaff();
+        renderStaff();
+      };
+    });
+  }
+
+  document.getElementById("staffAdd").onclick=()=>{
+    const input=document.getElementById("staffInput");
+    const name=input.value.trim();
+    if(!name) return;
+    if(staff.includes(name)){ toast("すでに登録されています"); return; }
+    staff.push(name);
+    input.value="";
+    saveStaff();
+    renderStaff();
+    toast("追加しました");
+  };
+
+  // ---------- init ----------
+  switchView("daily");
+})();
+</script>
+</body>
+</html>
