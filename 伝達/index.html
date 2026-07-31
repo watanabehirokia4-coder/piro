@@ -190,6 +190,14 @@
       </div>
       <div id="dailyList"></div>
       <textarea id="dailyInput" placeholder="予約内容・両替の有無など&#10;（選んだ日付に向けて誰でも記入できます）"></textarea>
+      <div class="photo-field">
+        <input type="file" accept="image/*" id="dailyPhotoInput" style="display:none;">
+        <button type="button" class="btn ghost sm" id="dailyPhotoBtn">📷 写真を追加</button>
+        <div class="photo-preview" id="dailyPhotoPreview" style="display:none;">
+          <img id="dailyPhotoPreviewImg" alt="">
+          <button type="button" class="photo-remove" id="dailyPhotoRemove">×</button>
+        </div>
+      </div>
       <button class="btn block" id="dailyAdd" style="margin-top:10px;">追記する</button>
     </div>
   </section>
@@ -321,6 +329,7 @@
   let openGeneralId=null;
   let genPhotoData=null;
   let perPhotoData=null;
+  let dailyPhotoData=null;
 
   function readAndCompressImage(file){
     return new Promise((resolve,reject)=>{
@@ -434,8 +443,15 @@
         <div class="memo-item">
           <div class="meta"><span>${fmtDateTime(m.createdAt)}</span></div>
           <div class="txt">${escapeHtml(m.text)}</div>
+          ${m.photo?`<div class="item-photo" data-photo="${m.id}"><img src="${m.photo}" alt=""></div>`:""}
         </div>
       `).join("");
+      list.querySelectorAll(".item-photo").forEach(el=>{
+        el.onclick=()=>{
+          const m=entry.memos.find(x=>x.id===el.dataset.photo);
+          if(m) openLightbox(m.photo);
+        };
+      });
     }
   }
 
@@ -461,6 +477,7 @@
         <div class="memo-item">
           <div class="meta"><span>${fmtDateTime(m.createdAt)}</span><button class="del" data-id="${m.id}">削除</button></div>
           <div class="txt">${escapeHtml(m.text)}</div>
+          ${m.photo?`<div class="item-photo" data-photo="${m.id}"><img src="${m.photo}" alt=""></div>`:""}
         </div>
       `).join("");
       list.querySelectorAll(".del").forEach(btn=>{
@@ -469,6 +486,12 @@
           saveDaily();
           renderWriteSection();
           renderCalendar();
+        };
+      });
+      list.querySelectorAll(".item-photo").forEach(el=>{
+        el.onclick=()=>{
+          const m=entry.memos.find(x=>x.id===el.dataset.photo);
+          if(m) openLightbox(m.photo);
         };
       });
     }
@@ -513,14 +536,49 @@
     renderCalendar();
   };
 
+  function renderDailyPhotoPreview(){
+    const box=document.getElementById("dailyPhotoPreview");
+    if(dailyPhotoData){
+      document.getElementById("dailyPhotoPreviewImg").src=dailyPhotoData;
+      box.style.display="";
+    }else{
+      box.style.display="none";
+    }
+  }
+  document.getElementById("dailyPhotoBtn").onclick=()=>document.getElementById("dailyPhotoInput").click();
+  document.getElementById("dailyPhotoInput").onchange=async(e)=>{
+    const file=e.target.files[0];
+    e.target.value="";
+    if(!file) return;
+    try{
+      dailyPhotoData=await readAndCompressImage(file);
+      renderDailyPhotoPreview();
+    }catch(err){
+      toast("写真の読み込みに失敗しました");
+    }
+  };
+  document.getElementById("dailyPhotoRemove").onclick=()=>{
+    dailyPhotoData=null;
+    renderDailyPhotoPreview();
+  };
+
   document.getElementById("dailyAdd").onclick=()=>{
     const ta=document.getElementById("dailyInput");
     const text=ta.value.trim();
     if(!text) return;
     const entry=dayEntry(currentDay);
-    entry.memos.push({id:uid(),text,createdAt:Date.now()});
+    const memo={id:uid(),text,createdAt:Date.now(),photo:dailyPhotoData||null};
+    entry.memos.push(memo);
+    try{
+      saveDaily();
+    }catch(err){
+      entry.memos.pop();
+      toast("保存に失敗しました(容量不足の可能性があります)");
+      return;
+    }
     ta.value="";
-    saveDaily();
+    dailyPhotoData=null;
+    renderDailyPhotoPreview();
     renderWriteSection();
     renderCalendar();
     if(currentDay===todayStr()) renderTodayCard();
