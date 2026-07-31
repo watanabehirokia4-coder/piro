@@ -113,6 +113,21 @@
   .backbar .btn.ghost{padding:8px 14px;}
   .detail-content{white-space:pre-wrap; font-size:15px; margin-bottom:16px; line-height:1.7;}
 
+  .photo-field{margin-top:8px;}
+  .photo-preview{position:relative; display:inline-block; margin-top:10px;}
+  .photo-preview img{max-width:140px; max-height:140px; border-radius:10px; display:block; border:1px solid var(--line); object-fit:cover;}
+  .photo-remove{position:absolute; top:-8px; right:-8px; width:24px; height:24px; border-radius:50%; background:#2b2a27; color:#fff; border:none; font-size:14px; line-height:1; cursor:pointer; display:flex; align-items:center; justify-content:center;}
+
+  .detail-photo{margin:0 0 16px;}
+  .detail-photo img{max-width:100%; border-radius:12px; display:block; cursor:zoom-in;}
+
+  .item-photo{margin-top:8px;}
+  .item-photo img{max-width:100%; max-height:220px; border-radius:10px; display:block; cursor:zoom-in; border:1px solid var(--line);}
+
+  .lightbox{position:fixed; inset:0; background:rgba(20,18,15,.92); z-index:60; display:none; align-items:center; justify-content:center; padding:24px;}
+  .lightbox.show{display:flex;}
+  .lightbox img{max-width:100%; max-height:100%; border-radius:10px;}
+
   .cal-head{display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;}
   .cal-head .label{font-size:15px; font-weight:700;}
   .cal-grid{display:grid; grid-template-columns:repeat(7,1fr); gap:5px;}
@@ -187,6 +202,14 @@
         <select id="genAuthor" style="margin-bottom:8px;"></select>
         <input type="text" id="genSubject" placeholder="件名" style="margin-bottom:8px;">
         <textarea id="genContent" placeholder="内容"></textarea>
+        <div class="photo-field">
+          <input type="file" accept="image/*" id="genPhotoInput" style="display:none;">
+          <button type="button" class="btn ghost sm" id="genPhotoBtn">📷 写真を追加</button>
+          <div class="photo-preview" id="genPhotoPreview" style="display:none;">
+            <img id="genPhotoPreviewImg" alt="">
+            <button type="button" class="photo-remove" id="genPhotoRemove">×</button>
+          </div>
+        </div>
         <button class="btn block" id="genAdd" style="margin-top:10px;">作成する</button>
       </div>
       <div class="card">
@@ -203,6 +226,7 @@
       <div class="card">
         <h2 id="genDetailSubject" style="font-size:18px; color:var(--text);"></h2>
         <div class="detail-content" id="genDetailContent"></div>
+        <div class="detail-photo" id="genDetailPhoto" style="display:none;"></div>
         <div style="font-size:12px; color:var(--sub); margin-bottom:14px;" id="genDetailMeta"></div>
         <h2>見た人（自分の名前をタップ）</h2>
         <div class="chips" id="genSeenChips"></div>
@@ -220,6 +244,14 @@
         <select id="perTo"></select>
       </div>
       <textarea id="perText" placeholder="一言メモ"></textarea>
+      <div class="photo-field">
+        <input type="file" accept="image/*" id="perPhotoInput" style="display:none;">
+        <button type="button" class="btn ghost sm" id="perPhotoBtn">📷 写真を追加</button>
+        <div class="photo-preview" id="perPhotoPreview" style="display:none;">
+          <img id="perPhotoPreviewImg" alt="">
+          <button type="button" class="photo-remove" id="perPhotoRemove">×</button>
+        </div>
+      </div>
       <button class="btn block" id="perAdd" style="margin-top:10px;">送る</button>
     </div>
     <div class="card">
@@ -256,6 +288,7 @@
 </nav>
 
 <div class="toast" id="toast"></div>
+<div class="lightbox" id="lightbox"><img id="lightboxImg" alt=""></div>
 
 <script>
 (function(){
@@ -286,6 +319,42 @@
   let calYear=Number(currentDay.slice(0,4));
   let calMonth=Number(currentDay.slice(5,7))-1; // 0-indexed
   let openGeneralId=null;
+  let genPhotoData=null;
+  let perPhotoData=null;
+
+  function readAndCompressImage(file){
+    return new Promise((resolve,reject)=>{
+      const reader=new FileReader();
+      reader.onload=()=>{
+        const img=new Image();
+        img.onload=()=>{
+          const maxDim=1000;
+          let w=img.width,h=img.height;
+          if(w>maxDim||h>maxDim){
+            if(w>h){h=Math.round(h*maxDim/w);w=maxDim;}
+            else{w=Math.round(w*maxDim/h);h=maxDim;}
+          }
+          const canvas=document.createElement("canvas");
+          canvas.width=w; canvas.height=h;
+          canvas.getContext("2d").drawImage(img,0,0,w,h);
+          resolve(canvas.toDataURL("image/jpeg",0.68));
+        };
+        img.onerror=()=>reject(new Error("image decode failed"));
+        img.src=reader.result;
+      };
+      reader.onerror=()=>reject(new Error("file read failed"));
+      reader.readAsDataURL(file);
+    });
+  }
+
+  function openLightbox(src){
+    if(!src) return;
+    document.getElementById("lightboxImg").src=src;
+    document.getElementById("lightbox").classList.add("show");
+  }
+  document.getElementById("lightbox").onclick=()=>{
+    document.getElementById("lightbox").classList.remove("show");
+  };
 
   function saveStaff(){saveJSON(STAFF_KEY,staff);}
   function saveDaily(){saveJSON(DAILY_KEY,daily);}
@@ -503,6 +572,15 @@
     if(!g){ renderGeneralList(); return; }
     document.getElementById("genDetailSubject").textContent=g.subject||"(件名なし)";
     document.getElementById("genDetailContent").textContent=g.content;
+    const photoBox=document.getElementById("genDetailPhoto");
+    if(g.photo){
+      photoBox.innerHTML=`<img src="${g.photo}" alt="">`;
+      photoBox.style.display="";
+      photoBox.onclick=()=>openLightbox(g.photo);
+    }else{
+      photoBox.style.display="none";
+      photoBox.innerHTML="";
+    }
     document.getElementById("genDetailMeta").textContent=`${g.author||"(作成者不明)"} が作成 · ${fmtDateTime(g.createdAt)}`;
     const chips=document.getElementById("genSeenChips");
     if(!staff.length){
@@ -524,6 +602,32 @@
     }
   }
 
+  function renderGenPhotoPreview(){
+    const box=document.getElementById("genPhotoPreview");
+    if(genPhotoData){
+      document.getElementById("genPhotoPreviewImg").src=genPhotoData;
+      box.style.display="";
+    }else{
+      box.style.display="none";
+    }
+  }
+  document.getElementById("genPhotoBtn").onclick=()=>document.getElementById("genPhotoInput").click();
+  document.getElementById("genPhotoInput").onchange=async(e)=>{
+    const file=e.target.files[0];
+    e.target.value="";
+    if(!file) return;
+    try{
+      genPhotoData=await readAndCompressImage(file);
+      renderGenPhotoPreview();
+    }catch(err){
+      toast("写真の読み込みに失敗しました");
+    }
+  };
+  document.getElementById("genPhotoRemove").onclick=()=>{
+    genPhotoData=null;
+    renderGenPhotoPreview();
+  };
+
   document.getElementById("genAdd").onclick=()=>{
     const authorEl=document.getElementById("genAuthor");
     const subjEl=document.getElementById("genSubject");
@@ -532,10 +636,19 @@
     const subject=subjEl.value.trim();
     const content=contEl.value.trim();
     if(!author||!content) return;
-    general.push({id:uid(),author,subject,content,createdAt:Date.now(),seenBy:[]});
+    const item={id:uid(),author,subject,content,createdAt:Date.now(),seenBy:[],photo:genPhotoData||null};
+    general.push(item);
+    try{
+      saveGeneral();
+    }catch(err){
+      general.pop();
+      toast("保存に失敗しました(容量不足の可能性があります)");
+      return;
+    }
     subjEl.value="";
     contEl.value="";
-    saveGeneral();
+    genPhotoData=null;
+    renderGenPhotoPreview();
     renderGeneralList();
     toast("作成しました");
   };
@@ -580,6 +693,7 @@
         <div class="body">
           <div class="to">${escapeHtml(p.from)||"(不明)"} → ${escapeHtml(p.to)}</div>
           <div class="txt">${escapeHtml(p.text)}</div>
+          ${p.photo?`<div class="item-photo" data-photo="${p.id}"><img src="${p.photo}" alt=""></div>`:""}
           <div class="meta"><span>${fmtDateTime(p.createdAt)}</span><button class="del" data-id="${p.id}">削除</button></div>
         </div>
       </div>
@@ -593,6 +707,12 @@
         renderPersonal();
       };
     });
+    list.querySelectorAll(".item-photo").forEach(el=>{
+      el.onclick=()=>{
+        const item=personal.find(p=>p.id===el.dataset.photo);
+        if(item) openLightbox(item.photo);
+      };
+    });
     list.querySelectorAll(".del").forEach(btn=>{
       btn.onclick=()=>{
         personal=personal.filter(p=>p.id!==btn.dataset.id);
@@ -604,6 +724,32 @@
 
   document.getElementById("perFilter").onchange=renderPersonal;
 
+  function renderPerPhotoPreview(){
+    const box=document.getElementById("perPhotoPreview");
+    if(perPhotoData){
+      document.getElementById("perPhotoPreviewImg").src=perPhotoData;
+      box.style.display="";
+    }else{
+      box.style.display="none";
+    }
+  }
+  document.getElementById("perPhotoBtn").onclick=()=>document.getElementById("perPhotoInput").click();
+  document.getElementById("perPhotoInput").onchange=async(e)=>{
+    const file=e.target.files[0];
+    e.target.value="";
+    if(!file) return;
+    try{
+      perPhotoData=await readAndCompressImage(file);
+      renderPerPhotoPreview();
+    }catch(err){
+      toast("写真の読み込みに失敗しました");
+    }
+  };
+  document.getElementById("perPhotoRemove").onclick=()=>{
+    perPhotoData=null;
+    renderPerPhotoPreview();
+  };
+
   document.getElementById("perAdd").onclick=()=>{
     const fromSel=document.getElementById("perFrom");
     const toSel=document.getElementById("perTo");
@@ -612,9 +758,18 @@
     const to=toSel.value;
     const text=textEl.value.trim();
     if(!from||!to||!text) return;
-    personal.push({id:uid(),from,to,text,createdAt:Date.now(),read:false,readAt:null});
+    const item={id:uid(),from,to,text,createdAt:Date.now(),read:false,readAt:null,photo:perPhotoData||null};
+    personal.push(item);
+    try{
+      savePersonal();
+    }catch(err){
+      personal.pop();
+      toast("保存に失敗しました(容量不足の可能性があります)");
+      return;
+    }
     textEl.value="";
-    savePersonal();
+    perPhotoData=null;
+    renderPerPhotoPreview();
     renderPersonal();
     toast("送りました");
   };
