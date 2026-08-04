@@ -578,6 +578,7 @@
   // ---------- 今日の伝達 / 伝達を残す ----------
   function dayEntry(dateStr){
     if(!daily[dateStr]) daily[dateStr]={memos:[],read:false,readAt:null};
+    if(!Array.isArray(daily[dateStr].memos)) daily[dateStr].memos=[];
     return daily[dateStr];
   }
 
@@ -744,7 +745,7 @@
     for(let day=1;day<=total;day++){
       const dateStr=`${calYear}-${p2(calMonth+1)}-${p2(day)}`;
       const e=daily[dateStr];
-      const hasMemo=e&&e.memos.length;
+      const hasMemo=e&&e.memos&&e.memos.length;
       const unread=hasMemo&&!e.read;
       const cls=["cal-day"];
       if(hasMemo) cls.push("has-entry");
