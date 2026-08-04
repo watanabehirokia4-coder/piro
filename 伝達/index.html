@@ -188,10 +188,7 @@
       <div class="cal-grid" id="calWeekdays"></div>
       <div class="cal-grid" id="calGrid" style="margin-top:5px;"></div>
 
-      <div class="row between" style="margin-top:16px; margin-bottom:10px;">
-        <div id="writeLabel" style="font-size:15px; font-weight:700;"></div>
-        <button class="btn ghost sm" id="writeToday">日付を選択</button>
-      </div>
+      <div id="writeLabel" style="font-size:15px; font-weight:700; margin-top:16px; margin-bottom:10px;"></div>
       <div id="dailyList"></div>
       <textarea id="dailyInput" placeholder="予約内容・両替の有無など&#10;（選んだ日付に向けて誰でも記入できます）"></textarea>
       <div class="photo-field">
@@ -772,8 +769,6 @@
       c.onclick=()=>setCurrentDay(c.dataset.date);
     });
   }
-
-  document.getElementById("writeToday").onclick=()=>setCurrentDay(todayStr());
 
   document.getElementById("calPrev").onclick=()=>{
     calMonth--; if(calMonth<0){calMonth=11;calYear--;}
