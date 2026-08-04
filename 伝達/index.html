@@ -339,6 +339,7 @@
   let staff=loadJSON(STAFF_KEY,[]);
   let daily=loadJSON(DAILY_KEY,{});
   let general=loadJSON(GENERAL_KEY,[]);
+  general.forEach(g=>{ if(!Array.isArray(g.seenBy)) g.seenBy=[]; });
   let personal=loadJSON(PERSONAL_KEY,[]);
 
   let currentDay=todayStr();
@@ -474,7 +475,7 @@
   function applyLocalData(key,value){
     if(key==="staff"){ staff=value||[]; saveJSON(STAFF_KEY,staff); }
     if(key==="daily"){ daily=value||{}; saveJSON(DAILY_KEY,daily); }
-    if(key==="general"){ general=value||[]; saveJSON(GENERAL_KEY,general); }
+    if(key==="general"){ general=value||[]; general.forEach(g=>{ if(!Array.isArray(g.seenBy)) g.seenBy=[]; }); saveJSON(GENERAL_KEY,general); }
     if(key==="personal"){ personal=value||[]; saveJSON(PERSONAL_KEY,personal); }
   }
 
@@ -534,13 +535,25 @@
     if(SYNC_KEYS.includes(key)) applyRemoteOrSeed(key,data);
   }
 
-  function startSync(){
+  let activeES=null;
+  function connectSync(){
     if(typeof EventSource==="undefined") return;
+    if(activeES){ try{ activeES.close(); }catch(err){} activeES=null; }
     try{
       const es=new EventSource(`${FIREBASE_BASE}/.json`);
+      activeES=es;
       es.addEventListener("put",e=>{ try{ handleFirebaseEvent(JSON.parse(e.data)); }catch(err){} });
       es.addEventListener("patch",e=>{ try{ handleFirebaseEvent(JSON.parse(e.data)); }catch(err){} });
     }catch(err){}
+  }
+
+  function startSync(){
+    connectSync();
+    document.addEventListener("visibilitychange",()=>{
+      if(document.visibilityState==="visible") connectSync();
+    });
+    window.addEventListener("pageshow",()=>connectSync());
+    window.addEventListener("online",()=>connectSync());
   }
 
   function toast(msg){
@@ -835,7 +848,7 @@
     const sorted=[...general].sort((a,b)=>b.createdAt-a.createdAt);
     list.innerHTML=sorted.map(g=>{
       const total=staff.length;
-      const seen=g.seenBy.length;
+      const seen=(g.seenBy||[]).length;
       const full=total>0&&seen>=total;
       return `
         <div class="subject-row" data-id="${g.id}">
@@ -890,6 +903,7 @@
       photoBox.innerHTML="";
     }
     document.getElementById("genDetailMeta").textContent=`${g.author||"(作成者不明)"} が作成 · ${fmtDateTime(g.createdAt)}`;
+    if(!Array.isArray(g.seenBy)) g.seenBy=[];
     const chips=document.getElementById("genSeenChips");
     if(!staff.length){
       chips.innerHTML=`<div class="empty">スタッフ管理タブで名前を追加してください</div>`;
