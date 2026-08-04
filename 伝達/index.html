@@ -323,6 +323,7 @@
   const GENERAL_KEY="tsutae_general_v1";
   const PERSONAL_KEY="tsutae_personal_v1";
   const WEEKDAYS=["日","月","火","水","木","金","土"];
+  const FIREBASE_BASE="https://kagurazyu-dentatsu-default-rtdb.asia-southeast1.firebasedatabase.app";
 
   const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,6);
   const p2=n=>String(n).padStart(2,"0");
@@ -427,10 +428,120 @@
     }
   };
 
-  function saveStaff(){saveJSON(STAFF_KEY,staff);}
-  function saveDaily(){saveJSON(DAILY_KEY,daily);}
-  function saveGeneral(){saveJSON(GENERAL_KEY,general);}
-  function savePersonal(){saveJSON(PERSONAL_KEY,personal);}
+  function saveStaff(){saveJSON(STAFF_KEY,staff); fbWrite("staff",staff);}
+  function saveDaily(){saveJSON(DAILY_KEY,daily); fbWrite("daily",daily);}
+  function saveGeneral(){saveJSON(GENERAL_KEY,general); fbWrite("general",general);}
+  function savePersonal(){saveJSON(PERSONAL_KEY,personal); fbWrite("personal",personal);}
+
+  // ---------- クラウド同期(Firebase Realtime Database) ----------
+  function fbWrite(key,value){
+    fetch(`${FIREBASE_BASE}/${key}.json`,{
+      method:"PUT",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify(value)
+    }).catch(()=>{
+      toast("オフラインのためこの端末にのみ保存しました");
+    });
+  }
+
+  function mergeStaffLists(local,remote){
+    const seen=new Set(); const out=[];
+    [...(local||[]),...(remote||[])].forEach(n=>{
+      if(n&&!seen.has(n)){ seen.add(n); out.push(n); }
+    });
+    return out;
+  }
+  function mergeById(local,remote){
+    const map=new Map();
+    [...(local||[]),...(remote||[])].forEach(item=>{ if(item&&item.id) map.set(item.id,item); });
+    return Array.from(map.values());
+  }
+  function mergeDailyMaps(local,remote){
+    const out={};
+    const dates=new Set([...Object.keys(local||{}),...Object.keys(remote||{})]);
+    dates.forEach(d=>{
+      const l=(local&&local[d])||{memos:[],read:false,readAt:null};
+      const r=(remote&&remote[d])||{memos:[],read:false,readAt:null};
+      out[d]={
+        memos:mergeById(l.memos,r.memos),
+        read:!!(l.read||r.read),
+        readAt:(r.read?r.readAt:l.readAt)||l.readAt||r.readAt||null
+      };
+    });
+    return out;
+  }
+
+  function applyLocalData(key,value){
+    if(key==="staff"){ staff=value||[]; saveJSON(STAFF_KEY,staff); }
+    if(key==="daily"){ daily=value||{}; saveJSON(DAILY_KEY,daily); }
+    if(key==="general"){ general=value||[]; saveJSON(GENERAL_KEY,general); }
+    if(key==="personal"){ personal=value||[]; saveJSON(PERSONAL_KEY,personal); }
+  }
+
+  function currentView(){
+    const b=document.querySelector("nav.tabs button.active");
+    return b?b.dataset.view:"daily";
+  }
+
+  function onRemoteUpdate(key){
+    const v=currentView();
+    if(key==="staff"){
+      if(v==="staff") renderStaff();
+      else if(v==="general"&&!editingGeneral){
+        if(document.getElementById("generalDetailView").style.display!=="none") renderGeneralDetail();
+        else renderGeneralList();
+      }
+      else if(v==="personal"&&!editingPersonalId) renderPersonal();
+      return;
+    }
+    if(key==="daily"&&v==="daily"&&!editingDailyId) renderDaily();
+    if(key==="general"&&v==="general"&&!editingGeneral){
+      if(document.getElementById("generalDetailView").style.display!=="none") renderGeneralDetail();
+      else renderGeneralList();
+    }
+    if(key==="personal"&&v==="personal"&&!editingPersonalId) renderPersonal();
+  }
+
+  const SYNC_KEYS=["staff","daily","general","personal"];
+  let firstSyncDone={staff:false,daily:false,general:false,personal:false};
+  let everConnected=false;
+
+  function applyRemoteOrSeed(key,remoteValue){
+    if(!firstSyncDone[key]){
+      firstSyncDone[key]=true;
+      let merged;
+      if(key==="staff") merged=mergeStaffLists(staff,remoteValue);
+      else if(key==="daily") merged=mergeDailyMaps(daily,remoteValue);
+      else merged=mergeById(key==="general"?general:personal,remoteValue);
+      applyLocalData(key,merged);
+      fbWrite(key,merged);
+    }else{
+      applyLocalData(key,remoteValue);
+    }
+    onRemoteUpdate(key);
+  }
+
+  function handleFirebaseEvent(evt){
+    const path=evt.path;
+    const data=evt.data;
+    if(path==="/"){
+      if(!everConnected){ everConnected=true; toast("他端末と同期しました"); }
+      const obj=(data&&typeof data==="object")?data:{};
+      SYNC_KEYS.forEach(k=>applyRemoteOrSeed(k,obj[k]));
+      return;
+    }
+    const key=path.replace(/^\//,"").split("/")[0];
+    if(SYNC_KEYS.includes(key)) applyRemoteOrSeed(key,data);
+  }
+
+  function startSync(){
+    if(typeof EventSource==="undefined") return;
+    try{
+      const es=new EventSource(`${FIREBASE_BASE}/.json`);
+      es.addEventListener("put",e=>{ try{ handleFirebaseEvent(JSON.parse(e.data)); }catch(err){} });
+      es.addEventListener("patch",e=>{ try{ handleFirebaseEvent(JSON.parse(e.data)); }catch(err){} });
+    }catch(err){}
+  }
 
   function toast(msg){
     const t=document.getElementById("toast");
@@ -1121,6 +1232,7 @@
 
   // ---------- init ----------
   switchView("daily");
+  startSync();
 })();
 </script>
 </body>
