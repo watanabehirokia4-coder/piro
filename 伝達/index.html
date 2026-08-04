@@ -287,6 +287,11 @@
   <!-- スタッフ管理 -->
   <section class="view" id="view-staff">
     <div class="card">
+      <h2>更新</h2>
+      <button class="btn block" id="reloadApp">画面を更新する</button>
+    </div>
+    <h2 style="font-size:15px; margin:0 0 12px; color:var(--sub); font-weight:600; letter-spacing:.04em;">スタッフ管理</h2>
+    <div class="card">
       <h2>スタッフ追加</h2>
       <div class="row">
         <input type="text" id="staffInput" placeholder="名前">
@@ -305,7 +310,7 @@
   <button class="active" data-view="daily"><span class="ico">📅</span>今日の伝達</button>
   <button data-view="general"><span class="ico">📢</span>全体伝達</button>
   <button data-view="personal"><span class="ico">👤</span>個人伝達</button>
-  <button data-view="staff"><span class="ico">⚙️</span>スタッフ</button>
+  <button data-view="staff"><span class="ico">⚙️</span>管理</button>
 </nav>
 
 <div class="toast" id="toast"></div>
@@ -568,7 +573,7 @@
 
   // ---------- header ----------
   function renderHeader(view){
-    const titles={daily:"今日の伝達",general:"全体伝達",personal:"個人伝達",staff:"スタッフ管理"};
+    const titles={daily:"今日の伝達",general:"全体伝達",personal:"個人伝達",staff:"管理"};
     document.getElementById("headerTitle").textContent=titles[view]||"";
     document.getElementById("headerDate").textContent=fmtDate(todayStr());
   }
@@ -1238,6 +1243,10 @@
     saveStaff();
     renderStaff();
     toast("追加しました");
+  };
+
+  document.getElementById("reloadApp").onclick=()=>{
+    location.reload();
   };
 
   // ---------- init ----------
