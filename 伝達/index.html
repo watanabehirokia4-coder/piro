@@ -128,6 +128,16 @@
   .item-photo{margin-top:8px;}
   .item-photo img{max-width:100%; max-height:220px; border-radius:10px; display:block; cursor:zoom-in; border:1px solid var(--line);}
 
+  .comment-list{margin-top:4px;}
+  .comment-item{background:var(--card2); border:1px solid var(--line); border-radius:9px; padding:8px 10px; margin-bottom:6px;}
+  .comment-item .c-author{font-weight:700; color:var(--accent); font-size:12.5px; margin-right:6px;}
+  .comment-item .c-time{font-size:11px; color:var(--sub); float:right;}
+  .comment-item .c-text{font-size:13.5px; white-space:pre-wrap; word-break:break-word; margin-top:3px; clear:both;}
+  .comment-form{display:flex; gap:6px; margin-top:8px;}
+  .comment-form select{flex:0 0 96px; padding:9px 6px; font-size:13px;}
+  .comment-form input{flex:1; padding:9px 10px; font-size:14px;}
+  .comment-form button{flex:0 0 auto; padding:9px 16px;}
+
   .lightbox{position:fixed; inset:0; background:rgba(20,18,15,.92); z-index:60; display:none; align-items:center; justify-content:center; padding:24px;}
   .lightbox.show{display:flex;}
   .lightbox img{max-width:100%; max-height:100%; border-radius:10px;}
@@ -240,6 +250,13 @@
         <div style="font-size:12px; color:var(--sub); margin-bottom:14px;" id="genDetailMeta"></div>
         <h2>見た人（自分の名前をタップ）</h2>
         <div class="chips" id="genSeenChips"></div>
+        <h2 style="margin-top:16px;">コメント</h2>
+        <div class="comment-list" id="genComments"></div>
+        <div class="comment-form">
+          <select id="genCommentAuthor"></select>
+          <input type="text" id="genCommentText" placeholder="コメント">
+          <button class="btn sm" id="genCommentAdd">→</button>
+        </div>
       </div>
       <div class="card" id="genDetailEditView" style="display:none;">
         <h2>編集</h2>
@@ -341,8 +358,9 @@
   let staff=loadJSON(STAFF_KEY,[]);
   let daily=loadJSON(DAILY_KEY,{});
   let general=loadJSON(GENERAL_KEY,[]);
-  general.forEach(g=>{ if(!Array.isArray(g.seenBy)) g.seenBy=[]; });
+  general.forEach(g=>{ if(!Array.isArray(g.seenBy)) g.seenBy=[]; if(!Array.isArray(g.comments)) g.comments=[]; });
   let personal=loadJSON(PERSONAL_KEY,[]);
+  personal.forEach(p=>{ if(!Array.isArray(p.comments)) p.comments=[]; });
 
   let currentDay=todayStr();
   let calYear=Number(currentDay.slice(0,4));
@@ -477,8 +495,8 @@
   function applyLocalData(key,value){
     if(key==="staff"){ staff=value||[]; saveJSON(STAFF_KEY,staff); }
     if(key==="daily"){ daily=value||{}; saveJSON(DAILY_KEY,daily); }
-    if(key==="general"){ general=value||[]; general.forEach(g=>{ if(!Array.isArray(g.seenBy)) g.seenBy=[]; }); saveJSON(GENERAL_KEY,general); }
-    if(key==="personal"){ personal=value||[]; saveJSON(PERSONAL_KEY,personal); }
+    if(key==="general"){ general=value||[]; general.forEach(g=>{ if(!Array.isArray(g.seenBy)) g.seenBy=[]; if(!Array.isArray(g.comments)) g.comments=[]; }); saveJSON(GENERAL_KEY,general); }
+    if(key==="personal"){ personal=value||[]; personal.forEach(p=>{ if(!Array.isArray(p.comments)) p.comments=[]; }); saveJSON(PERSONAL_KEY,personal); }
   }
 
   function currentView(){
@@ -922,7 +940,42 @@
         };
       });
     }
+
+    if(!Array.isArray(g.comments)) g.comments=[];
+    const commentsBox=document.getElementById("genComments");
+    if(!g.comments.length){
+      commentsBox.innerHTML=`<div class="empty">まだコメントはありません</div>`;
+    }else{
+      commentsBox.innerHTML=g.comments.map(c=>`
+        <div class="comment-item">
+          <span class="c-author">${escapeHtml(c.author)}</span><span class="c-time">${fmtDateTime(c.createdAt)}</span>
+          <div class="c-text">${escapeHtml(c.text)}</div>
+        </div>
+      `).join("");
+    }
+    document.getElementById("genCommentAuthor").innerHTML=staffOptionsHtml();
   }
+
+  document.getElementById("genCommentAdd").onclick=()=>{
+    const g=general.find(x=>x.id===openGeneralId);
+    if(!g) return;
+    const author=document.getElementById("genCommentAuthor").value;
+    const textEl=document.getElementById("genCommentText");
+    const text=textEl.value.trim();
+    if(!author||!text) return;
+    if(!Array.isArray(g.comments)) g.comments=[];
+    g.comments.push({id:uid(),author,text,createdAt:Date.now()});
+    try{
+      saveGeneral();
+    }catch(err){
+      g.comments.pop();
+      toast("保存に失敗しました(容量不足の可能性があります)");
+      return;
+    }
+    textEl.value="";
+    renderGeneralDetail();
+    toast("コメントしました");
+  };
 
   function renderGenPhotoPreview(){
     const box=document.getElementById("genPhotoPreview");
@@ -958,7 +1011,7 @@
     const subject=subjEl.value.trim();
     const content=contEl.value.trim();
     if(!author||!content) return;
-    const item={id:uid(),author,subject,content,createdAt:Date.now(),seenBy:[],photo:genPhotoData||null};
+    const item={id:uid(),author,subject,content,createdAt:Date.now(),seenBy:[],comments:[],photo:genPhotoData||null};
     general.push(item);
     try{
       saveGeneral();
@@ -1064,6 +1117,7 @@
           </div>
         `;
       }
+      const comments=Array.isArray(p.comments)?p.comments:[];
       return `
       <div class="personal-item ${p.read?"read":""}" data-id="${p.id}">
         <div class="box" data-toggle="${p.id}">${p.read?"✓":""}</div>
@@ -1073,6 +1127,19 @@
           ${p.photo?`<div class="item-photo" data-photo="${p.id}"><img src="${p.photo}" alt=""></div>`:""}
           <div class="meta"><span>${fmtDateTime(p.createdAt)}</span>
             <span><button class="edit" data-edit-personal="${p.id}">編集</button><button class="del" data-id="${p.id}">削除</button></span>
+          </div>
+          <div class="comment-list">
+            ${comments.map(c=>`
+              <div class="comment-item">
+                <span class="c-author">${escapeHtml(c.author)}</span><span class="c-time">${fmtDateTime(c.createdAt)}</span>
+                <div class="c-text">${escapeHtml(c.text)}</div>
+              </div>
+            `).join("")}
+          </div>
+          <div class="comment-form">
+            <select data-comment-author="${p.id}">${staffOptionsHtml()}</select>
+            <input type="text" data-comment-text="${p.id}" placeholder="コメント">
+            <button class="btn sm" data-comment-add="${p.id}">→</button>
           </div>
         </div>
       </div>
@@ -1151,6 +1218,29 @@
         toast("更新しました");
       };
     });
+    list.querySelectorAll("[data-comment-add]").forEach(btn=>{
+      btn.onclick=()=>{
+        const id=btn.dataset.commentAdd;
+        const item=personal.find(p=>p.id===id);
+        if(!item) return;
+        const authorSel=list.querySelector(`select[data-comment-author="${id}"]`);
+        const textInput=list.querySelector(`input[data-comment-text="${id}"]`);
+        const author=authorSel.value;
+        const text=textInput.value.trim();
+        if(!author||!text) return;
+        if(!Array.isArray(item.comments)) item.comments=[];
+        item.comments.push({id:uid(),author,text,createdAt:Date.now()});
+        try{
+          savePersonal();
+        }catch(err){
+          item.comments.pop();
+          toast("保存に失敗しました(容量不足の可能性があります)");
+          return;
+        }
+        renderPersonal();
+        toast("コメントしました");
+      };
+    });
   }
 
   document.getElementById("perFilter").onchange=()=>{
@@ -1193,7 +1283,7 @@
     const to=toSel.value;
     const text=textEl.value.trim();
     if(!from||!to||!text) return;
-    const item={id:uid(),from,to,text,createdAt:Date.now(),read:false,readAt:null,photo:perPhotoData||null};
+    const item={id:uid(),from,to,text,createdAt:Date.now(),read:false,readAt:null,photo:perPhotoData||null,comments:[]};
     personal.push(item);
     try{
       savePersonal();
