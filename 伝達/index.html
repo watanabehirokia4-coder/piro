@@ -449,40 +449,90 @@
     }
   };
 
-  function saveStaff(){saveJSON(STAFF_KEY,staff); fbWrite("staff",staff);}
-  function saveDaily(){saveJSON(DAILY_KEY,daily); fbWrite("daily",daily);}
-  function saveGeneral(){saveJSON(GENERAL_KEY,general); fbWrite("general",general);}
-  function savePersonal(){saveJSON(PERSONAL_KEY,personal); fbWrite("personal",personal);}
+  function saveStaff(){saveJSON(STAFF_KEY,staff);}
+  function saveDaily(){saveJSON(DAILY_KEY,daily);}
+  function saveGeneral(){saveJSON(GENERAL_KEY,general);}
+  function savePersonal(){saveJSON(PERSONAL_KEY,personal);}
 
   // ---------- クラウド同期(Firebase Realtime Database) ----------
-  function fbWrite(key,value){
-    fetch(`${FIREBASE_BASE}/${key}.json`,{
-      method:"PUT",
-      headers:{"Content-Type":"application/json"},
-      body:JSON.stringify(value)
-    }).catch(()=>{
-      toast("オフラインのためこの端末にのみ保存しました");
+  // 全体を丸ごと書き込むと複数端末が同時に保存した時に片方の変更が消えるため、
+  // 各項目を個別のパスに書き込む(1件ずつのPUT/PATCH/DELETE)方式にしている。
+  function fbKey(s){ return encodeURIComponent(String(s)).replace(/\./g,"%2E"); }
+  function fbPut(path,value){
+    return fetch(`${FIREBASE_BASE}${path}.json`,{
+      method:"PUT", headers:{"Content-Type":"application/json"}, body:JSON.stringify(value)
+    }).catch(()=>{ toast("オフラインのためこの端末にのみ保存しました"); });
+  }
+  function fbPatch(path,value){
+    return fetch(`${FIREBASE_BASE}${path}.json`,{
+      method:"PATCH", headers:{"Content-Type":"application/json"}, body:JSON.stringify(value)
+    }).catch(()=>{ toast("オフラインのためこの端末にのみ保存しました"); });
+  }
+  function fbDelete(path){
+    return fetch(`${FIREBASE_BASE}${path}.json`,{method:"DELETE"})
+      .catch(()=>{ toast("オフラインのためこの端末にのみ保存しました"); });
+  }
+
+  function remoteMapToArray(mapOrArr){
+    if(!mapOrArr) return [];
+    if(Array.isArray(mapOrArr)) return mapOrArr;
+    return Object.entries(mapOrArr).map(([id,v])=>({id,...v}));
+  }
+  function arrayToRemoteMap(arr){
+    const out={};
+    (arr||[]).forEach(item=>{ if(!item||!item.id) return; const {id,...rest}=item; out[id]=rest; });
+    return out;
+  }
+  function remoteStaffToArray(mapOrArr){
+    if(!mapOrArr) return [];
+    if(Array.isArray(mapOrArr)) return mapOrArr;
+    return Object.keys(mapOrArr).map(k=>decodeURIComponent(k));
+  }
+  function staffArrayToRemoteMap(arr){
+    const out={};
+    (arr||[]).forEach(name=>{ out[fbKey(name)]=true; });
+    return out;
+  }
+  function remoteDailyToLocal(mapObj){
+    const out={};
+    if(!mapObj) return out;
+    Object.entries(mapObj).forEach(([date,v])=>{
+      const memosArr=Array.isArray(v.memos)?v.memos:Object.entries(v.memos||{}).map(([id,m])=>({id,...m}));
+      out[date]={memos:memosArr, read:!!v.read, readAt:v.readAt||null};
     });
+    return out;
+  }
+  function localDailyToRemote(obj){
+    const out={};
+    Object.entries(obj||{}).forEach(([date,entry])=>{
+      const memosMap={};
+      (entry.memos||[]).forEach(m=>{ if(!m||!m.id) return; const {id,...rest}=m; memosMap[id]=rest; });
+      out[date]={memos:memosMap, read:!!entry.read, readAt:entry.readAt||null};
+    });
+    return out;
   }
 
   function mergeStaffLists(local,remote){
+    const remoteNames=remoteStaffToArray(remote);
     const seen=new Set(); const out=[];
-    [...(local||[]),...(remote||[])].forEach(n=>{
+    [...(local||[]),...remoteNames].forEach(n=>{
       if(n&&!seen.has(n)){ seen.add(n); out.push(n); }
     });
     return out;
   }
   function mergeById(local,remote){
+    const remoteArr=remoteMapToArray(remote);
     const map=new Map();
-    [...(local||[]),...(remote||[])].forEach(item=>{ if(item&&item.id) map.set(item.id,item); });
+    [...(local||[]),...remoteArr].forEach(item=>{ if(item&&item.id) map.set(item.id,item); });
     return Array.from(map.values());
   }
   function mergeDailyMaps(local,remote){
+    const remoteConverted=remoteDailyToLocal(remote);
     const out={};
-    const dates=new Set([...Object.keys(local||{}),...Object.keys(remote||{})]);
+    const dates=new Set([...Object.keys(local||{}),...Object.keys(remoteConverted)]);
     dates.forEach(d=>{
       const l=(local&&local[d])||{memos:[],read:false,readAt:null};
-      const r=(remote&&remote[d])||{memos:[],read:false,readAt:null};
+      const r=remoteConverted[d]||{memos:[],read:false,readAt:null};
       out[d]={
         memos:mergeById(l.memos,r.memos),
         read:!!(l.read||r.read),
@@ -535,9 +585,15 @@
       else if(key==="daily") merged=mergeDailyMaps(daily,remoteValue);
       else merged=mergeById(key==="general"?general:personal,remoteValue);
       applyLocalData(key,merged);
-      fbWrite(key,merged);
+      if(key==="staff") fbPut("/staff",staffArrayToRemoteMap(merged));
+      else if(key==="daily") fbPut("/daily",localDailyToRemote(merged));
+      else fbPut("/"+key,arrayToRemoteMap(merged));
     }else{
-      applyLocalData(key,remoteValue);
+      let converted;
+      if(key==="staff") converted=remoteStaffToArray(remoteValue);
+      else if(key==="daily") converted=remoteDailyToLocal(remoteValue);
+      else converted=remoteMapToArray(remoteValue);
+      applyLocalData(key,converted);
     }
     onRemoteUpdate(key);
   }
@@ -545,14 +601,90 @@
   function handleFirebaseEvent(evt){
     const path=evt.path;
     const data=evt.data;
-    if(path==="/"){
+    const parts=path.replace(/^\//,"").split("/").filter(Boolean);
+
+    if(parts.length===0){
       if(!everConnected){ everConnected=true; toast("他端末と同期しました"); }
       const obj=(data&&typeof data==="object")?data:{};
       SYNC_KEYS.forEach(k=>applyRemoteOrSeed(k,obj[k]));
       return;
     }
-    const key=path.replace(/^\//,"").split("/")[0];
-    if(SYNC_KEYS.includes(key)) applyRemoteOrSeed(key,data);
+
+    const key=parts[0];
+    if(!SYNC_KEYS.includes(key)) return;
+
+    if(parts.length===1){
+      applyRemoteOrSeed(key,data);
+      return;
+    }
+
+    // 個別項目への深いパスへのpatch/putは、初回同期が済んでいる時だけ反映する
+    if(!firstSyncDone[key]) return;
+
+    if(key==="staff" && parts.length===2){
+      const name=decodeURIComponent(parts[1]);
+      if(data===null){ staff=staff.filter(n=>n!==name); }
+      else if(!staff.includes(name)){ staff.push(name); }
+      saveJSON(STAFF_KEY,staff);
+    }
+    else if((key==="general"||key==="personal") && parts.length===2){
+      const id=parts[1];
+      let arr=key==="general"?general:personal;
+      if(data===null){
+        arr=arr.filter(x=>x.id!==id);
+      }else{
+        const conv={id,...data};
+        if(key==="general" && !Array.isArray(conv.seenBy)) conv.seenBy=[];
+        if(!Array.isArray(conv.comments)) conv.comments=[];
+        const idx=arr.findIndex(x=>x.id===id);
+        if(idx===-1){ arr=[...arr,conv]; } else { arr=[...arr]; arr[idx]=conv; }
+      }
+      if(key==="general"){ general=arr; saveJSON(GENERAL_KEY,general); }
+      else{ personal=arr; saveJSON(PERSONAL_KEY,personal); }
+    }
+    else if((key==="general"||key==="personal") && parts.length===3){
+      const id=parts[1]; const field=parts[2];
+      const arr=key==="general"?general:personal;
+      const item=arr.find(x=>x.id===id);
+      if(item){
+        item[field]=data;
+        if(field==="seenBy" && !Array.isArray(item.seenBy)) item.seenBy=[];
+        if(field==="comments" && !Array.isArray(item.comments)) item.comments=[];
+        saveJSON(key==="general"?GENERAL_KEY:PERSONAL_KEY, arr);
+      }
+    }
+    else if(key==="daily" && parts.length===2){
+      const date=parts[1];
+      if(data===null){ delete daily[date]; }
+      else{
+        const entry=dayEntry(date);
+        if(data.read!==undefined) entry.read=!!data.read;
+        if(data.readAt!==undefined) entry.readAt=data.readAt||null;
+        if(data.memos!==undefined){
+          entry.memos=Array.isArray(data.memos)?data.memos:Object.entries(data.memos||{}).map(([id,m])=>({id,...m}));
+        }
+      }
+      saveJSON(DAILY_KEY,daily);
+    }
+    else if(key==="daily" && parts.length===3){
+      const date=parts[1]; const field=parts[2];
+      const entry=dayEntry(date);
+      if(field==="read") entry.read=!!data;
+      if(field==="readAt") entry.readAt=data||null;
+      saveJSON(DAILY_KEY,daily);
+    }
+    else if(key==="daily" && parts.length===4 && parts[2]==="memos"){
+      const date=parts[1], memoId=parts[3];
+      const entry=dayEntry(date);
+      if(data===null){ entry.memos=entry.memos.filter(m=>m.id!==memoId); }
+      else{
+        const conv={id:memoId,...data};
+        const idx=entry.memos.findIndex(m=>m.id===memoId);
+        if(idx===-1) entry.memos.push(conv); else entry.memos[idx]=conv;
+      }
+      saveJSON(DAILY_KEY,daily);
+    }
+    onRemoteUpdate(key);
   }
 
   let activeES=null;
@@ -665,10 +797,13 @@
   }
 
   document.getElementById("readBox").onclick=()=>{
-    const entry=dayEntry(todayStr());
+    const today=todayStr();
+    const entry=dayEntry(today);
     entry.read=!entry.read;
     entry.readAt=entry.read?Date.now():null;
     saveDaily();
+    fbPut(`/daily/${today}/read`,entry.read);
+    fbPut(`/daily/${today}/readAt`,entry.readAt);
     renderTodayCard();
     renderCalendar();
   };
@@ -711,8 +846,10 @@
 
     list.querySelectorAll(".del").forEach(btn=>{
       btn.onclick=()=>{
-        entry.memos=entry.memos.filter(m=>m.id!==btn.dataset.id);
+        const id=btn.dataset.id;
+        entry.memos=entry.memos.filter(m=>m.id!==id);
         saveDaily();
+        fbDelete(`/daily/${currentDay}/memos/${id}`);
         renderWriteSection();
         renderCalendar();
         if(currentDay===todayStr()) renderTodayCard();
@@ -755,6 +892,7 @@
           toast("保存に失敗しました(容量不足の可能性があります)");
           return;
         }
+        fbPut(`/daily/${currentDay}/memos/${m.id}`,{text:m.text,createdAt:m.createdAt,photo:m.photo||null});
         editingDailyId=null;
         editingDailyPhoto=null;
         renderWriteSection();
@@ -842,6 +980,7 @@
       toast("保存に失敗しました(容量不足の可能性があります)");
       return;
     }
+    fbPut(`/daily/${currentDay}/memos/${memo.id}`,{text:memo.text,createdAt:memo.createdAt,photo:memo.photo||null});
     ta.value="";
     dailyPhotoData=null;
     renderDailyPhotoPreview();
@@ -936,6 +1075,7 @@
           const idx=g.seenBy.indexOf(name);
           if(idx===-1) g.seenBy.push(name); else g.seenBy.splice(idx,1);
           saveGeneral();
+          fbPut(`/general/${g.id}/seenBy`,g.seenBy);
           renderGeneralDetail();
         };
       });
@@ -972,6 +1112,7 @@
       toast("保存に失敗しました(容量不足の可能性があります)");
       return;
     }
+    fbPut(`/general/${g.id}/comments`,g.comments);
     textEl.value="";
     renderGeneralDetail();
     toast("コメントしました");
@@ -1020,6 +1161,10 @@
       toast("保存に失敗しました(容量不足の可能性があります)");
       return;
     }
+    {
+      const {id,...rest}=item;
+      fbPut(`/general/${id}`,rest);
+    }
     subjEl.value="";
     contEl.value="";
     genPhotoData=null;
@@ -1056,6 +1201,7 @@
       toast("保存に失敗しました(容量不足の可能性があります)");
       return;
     }
+    fbPatch(`/general/${g.id}`,{author:g.author,subject:g.subject,content:g.content,photo:g.photo||null});
     editingGeneral=false;
     editingGeneralPhoto=null;
     renderGeneralDetail();
@@ -1066,8 +1212,10 @@
   document.getElementById("genBack").onclick=()=>{ openGeneralId=null; renderGeneralList(); };
   document.getElementById("genDelete").onclick=()=>{
     if(!confirm("この伝達を削除しますか？")) return;
-    general=general.filter(g=>g.id!==openGeneralId);
+    const id=openGeneralId;
+    general=general.filter(g=>g.id!==id);
     saveGeneral();
+    fbDelete(`/general/${id}`);
     openGeneralId=null;
     renderGeneralList();
   };
@@ -1163,6 +1311,7 @@
         item.read=!item.read;
         item.readAt=item.read?Date.now():null;
         savePersonal();
+        fbPatch(`/personal/${item.id}`,{read:item.read,readAt:item.readAt});
         renderPersonal();
       };
     });
@@ -1174,8 +1323,10 @@
     });
     list.querySelectorAll(".del").forEach(btn=>{
       btn.onclick=()=>{
-        personal=personal.filter(p=>p.id!==btn.dataset.id);
+        const id=btn.dataset.id;
+        personal=personal.filter(p=>p.id!==id);
         savePersonal();
+        fbDelete(`/personal/${id}`);
         renderPersonal();
       };
     });
@@ -1212,6 +1363,7 @@
           toast("保存に失敗しました(容量不足の可能性があります)");
           return;
         }
+        fbPatch(`/personal/${item.id}`,{from:item.from,to:item.to,text:item.text,photo:item.photo||null});
         editingPersonalId=null;
         editingPersonalPhoto=null;
         renderPersonal();
@@ -1237,6 +1389,7 @@
           toast("保存に失敗しました(容量不足の可能性があります)");
           return;
         }
+        fbPut(`/personal/${item.id}/comments`,item.comments);
         renderPersonal();
         toast("コメントしました");
       };
@@ -1292,6 +1445,10 @@
       toast("保存に失敗しました(容量不足の可能性があります)");
       return;
     }
+    {
+      const {id,...rest}=item;
+      fbPut(`/personal/${id}`,rest);
+    }
     textEl.value="";
     perPhotoData=null;
     renderPerPhotoPreview();
@@ -1318,6 +1475,7 @@
         if(!confirm(`「${name}」を削除しますか？`)) return;
         staff=staff.filter(n=>n!==name);
         saveStaff();
+        fbDelete(`/staff/${fbKey(name)}`);
         renderStaff();
       };
     });
@@ -1331,6 +1489,7 @@
     staff.push(name);
     input.value="";
     saveStaff();
+    fbPut(`/staff/${fbKey(name)}`,true);
     renderStaff();
     toast("追加しました");
   };
