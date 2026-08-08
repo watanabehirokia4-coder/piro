@@ -1495,7 +1495,7 @@
   };
 
   document.getElementById("reloadApp").onclick=()=>{
-    location.reload();
+    location.href=location.pathname+"?_="+Date.now();
   };
 
   // ---------- init ----------
