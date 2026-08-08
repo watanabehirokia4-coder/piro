@@ -458,17 +458,28 @@
   // 全体を丸ごと書き込むと複数端末が同時に保存した時に片方の変更が消えるため、
   // 各項目を個別のパスに書き込む(1件ずつのPUT/PATCH/DELETE)方式にしている。
   function fbKey(s){ return encodeURIComponent(String(s)).replace(/\./g,"%2E"); }
+  // 直近でローカルから書き込んだキーは、再接続直後の古いスナップショットで
+  // 上書きされないよう一定時間(猶予)は全体置き換えを無視する。
+  let lastLocalWrite={staff:0,daily:0,general:0,personal:0};
+  const LOCAL_WRITE_GRACE_MS=8000;
+  function fbTouch(path){
+    const key=path.replace(/^\//,"").split("/")[0];
+    if(Object.prototype.hasOwnProperty.call(lastLocalWrite,key)) lastLocalWrite[key]=Date.now();
+  }
   function fbPut(path,value){
+    fbTouch(path);
     return fetch(`${FIREBASE_BASE}${path}.json`,{
       method:"PUT", headers:{"Content-Type":"application/json"}, body:JSON.stringify(value)
     }).catch(()=>{ toast("オフラインのためこの端末にのみ保存しました"); });
   }
   function fbPatch(path,value){
+    fbTouch(path);
     return fetch(`${FIREBASE_BASE}${path}.json`,{
       method:"PATCH", headers:{"Content-Type":"application/json"}, body:JSON.stringify(value)
     }).catch(()=>{ toast("オフラインのためこの端末にのみ保存しました"); });
   }
   function fbDelete(path){
+    fbTouch(path);
     return fetch(`${FIREBASE_BASE}${path}.json`,{method:"DELETE"})
       .catch(()=>{ toast("オフラインのためこの端末にのみ保存しました"); });
   }
@@ -589,6 +600,12 @@
       else if(key==="daily") fbPut("/daily",localDailyToRemote(merged));
       else fbPut("/"+key,arrayToRemoteMap(merged));
     }else{
+      if(Date.now()-lastLocalWrite[key]<LOCAL_WRITE_GRACE_MS){
+        // 直近このキーへ自分で書き込んだばかりなので、再接続時の古いスナップショットで
+        // 上書きしない(反映済みの個別patchイベントの方を信用する)
+        onRemoteUpdate(key);
+        return;
+      }
       let converted;
       if(key==="staff") converted=remoteStaffToArray(remoteValue);
       else if(key==="daily") converted=remoteDailyToLocal(remoteValue);
