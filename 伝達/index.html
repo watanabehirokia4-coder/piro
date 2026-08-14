@@ -606,6 +606,19 @@
         onRemoteUpdate(key);
         return;
       }
+      if(key!=="daily" && Array.isArray(remoteValue)){
+        // 古いバージョンの端末が丸ごと配列で書き込んだと思われる。
+        // そのまま置き換えると他端末の変更(削除など)が消えてしまうので、
+        // 上書きせずマージしてから新しい形式で書き戻す。
+        let merged;
+        if(key==="staff") merged=mergeStaffLists(staff,remoteValue);
+        else merged=mergeById(key==="general"?general:personal,remoteValue);
+        applyLocalData(key,merged);
+        if(key==="staff") fbPut("/staff",staffArrayToRemoteMap(merged));
+        else fbPut("/"+key,arrayToRemoteMap(merged));
+        onRemoteUpdate(key);
+        return;
+      }
       let converted;
       if(key==="staff") converted=remoteStaffToArray(remoteValue);
       else if(key==="daily") converted=remoteDailyToLocal(remoteValue);
