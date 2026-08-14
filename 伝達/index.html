@@ -319,6 +319,7 @@
       <h2>スタッフ一覧</h2>
       <div id="staffList"></div>
     </div>
+    <div style="text-align:center; color:var(--sub); font-size:11px; margin:4px 0 8px;">バージョン: <span id="versionLabel"></span></div>
   </section>
 
 </main>
@@ -343,6 +344,7 @@
   const PERSONAL_KEY="tsutae_personal_v1";
   const WEEKDAYS=["日","月","火","水","木","金","土"];
   const FIREBASE_BASE="https://kagurazyu-dentatsu-default-rtdb.asia-southeast1.firebasedatabase.app";
+  const APP_VERSION="20260814a";
 
   const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,6);
   const p2=n=>String(n).padStart(2,"0");
@@ -634,6 +636,18 @@
     onRemoteUpdate(key);
   }
 
+  // ---------- バージョン自動更新 ----------
+  // Firebaseの /appVersion は「今公開されている最新版の目印」。デプロイのたびに
+  // 開発側が明示的に更新する(端末側からは絶対に書き込まない)。端末はこれを見て、
+  // 自分が古いバージョンのまま繋がっていたら自動で強制的に再読み込みする。
+  // (古い端末がキャッシュを残したまま、手元の古い情報をクラウドへ書き戻してしまう問題への対策)
+  function checkVersion(remoteVersion){
+    if(remoteVersion && remoteVersion!==APP_VERSION){
+      toast("新しいバージョンに更新します…");
+      setTimeout(()=>{ location.href=location.pathname+"?_="+Date.now(); },1200);
+    }
+  }
+
   function handleFirebaseEvent(evt){
     const path=evt.path;
     const data=evt.data;
@@ -642,8 +656,14 @@
     if(parts.length===0){
       if(!everConnected){ everConnected=true; toast("他端末と同期しました"); }
       const obj=(data&&typeof data==="object")?data:{};
+      checkVersion(obj.appVersion);
       SYNC_KEYS.forEach(k=>applyRemoteOrSeed(k,obj[k]));
       if(!everSyncedOnce){ everSyncedOnce=true; localStorage.setItem(SYNCED_ONCE_KEY,"1"); }
+      return;
+    }
+
+    if(parts[0]==="appVersion" && parts.length===1){
+      checkVersion(data);
       return;
     }
 
@@ -1536,6 +1556,7 @@
   };
 
   // ---------- init ----------
+  document.getElementById("versionLabel").textContent=APP_VERSION;
   switchView("daily");
   startSync();
 })();
