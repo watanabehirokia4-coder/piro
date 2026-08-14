@@ -344,7 +344,7 @@
   const PERSONAL_KEY="tsutae_personal_v1";
   const WEEKDAYS=["日","月","火","水","木","金","土"];
   const FIREBASE_BASE="https://kagurazyu-dentatsu-default-rtdb.asia-southeast1.firebasedatabase.app";
-  const APP_VERSION="20260814b";
+  const APP_VERSION="20260814c";
 
   const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,6);
   const p2=n=>String(n).padStart(2,"0");
@@ -662,8 +662,14 @@
     location.href=location.pathname+"?_="+Date.now();
   }
 
+  const VERSION_RELOAD_COUNT_KEY="tsutae_version_reload_count_v1";
   function checkVersion(remoteVersion){
     if(remoteVersion && remoteVersion!==APP_VERSION){
+      // 短時間に何度も自動更新が走ってループしないよう、直近の再読み込み回数を数え、
+      // 一定回数を超えたら安全のため自動更新を止める(手動の更新ボタンは引き続き使える)。
+      const count=Number(sessionStorage.getItem(VERSION_RELOAD_COUNT_KEY)||"0");
+      if(count>=3) return;
+      sessionStorage.setItem(VERSION_RELOAD_COUNT_KEY,String(count+1));
       toast("新しいバージョンに更新します…");
       setTimeout(hardReload,1200);
     }
