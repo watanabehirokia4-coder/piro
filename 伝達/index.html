@@ -344,7 +344,7 @@
   const PERSONAL_KEY="tsutae_personal_v1";
   const WEEKDAYS=["日","月","火","水","木","金","土"];
   const FIREBASE_BASE="https://kagurazyu-dentatsu-default-rtdb.asia-southeast1.firebasedatabase.app";
-  const APP_VERSION="20260814c";
+  const APP_VERSION="20260814d";
 
   const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,6);
   const p2=n=>String(n).padStart(2,"0");
@@ -363,6 +363,18 @@
   general.forEach(g=>{ if(!Array.isArray(g.seenBy)) g.seenBy=[]; if(!Array.isArray(g.comments)) g.comments=[]; });
   let personal=loadJSON(PERSONAL_KEY,[]);
   personal.forEach(p=>{ if(!Array.isArray(p.comments)) p.comments=[]; });
+
+  // ---------- 削除履歴(墓標) ----------
+  // Firebase側の一覧取得が、削除した項目を古い状態のまま返し続けることがあるため、
+  // 一度この端末で削除した項目は、以後クラウド側が何と言ってきても
+  // 二度と復活させない(明示的にもう一度追加された時だけ解除する)。
+  const TOMBSTONE_KEY="tsutae_tombstones_v1";
+  let tombstones=loadJSON(TOMBSTONE_KEY,{staff:[],general:[],personal:[],dailyMemos:[]});
+  ["staff","general","personal","dailyMemos"].forEach(t=>{ if(!Array.isArray(tombstones[t])) tombstones[t]=[]; });
+  function saveTombstones(){ saveJSON(TOMBSTONE_KEY,tombstones); }
+  function addTombstone(type,key){ if(!tombstones[type].includes(key)){ tombstones[type].push(key); saveTombstones(); } }
+  function removeTombstone(type,key){ if(tombstones[type].includes(key)){ tombstones[type]=tombstones[type].filter(k=>k!==key); saveTombstones(); } }
+  function isTombstoned(type,key){ return tombstones[type].includes(key); }
 
   let currentDay=todayStr();
   let calYear=Number(currentDay.slice(0,4));
@@ -502,31 +514,55 @@
       .catch(()=>{ toast("オフラインのためこの端末にのみ保存しました"); }));
   }
 
-  function remoteMapToArray(mapOrArr){
+  // ---------- 新形式の目印(_v) ----------
+  // 新しいコードで書き込むデータには必ず _v:1 を付ける。移行が済んだ端末は、
+  // 目印のないデータ(＝まだ古いバージョンのままの端末が書いたもの)を無視する。
+  // これにより、古い端末がどれだけ書き込んでも新しい端末側には影響しなくなる。
+  const V_MIGRATED_KEY="tsutae_v_migrated_v1";
+  let vMigrated=localStorage.getItem(V_MIGRATED_KEY)==="1";
+  function isTaggedValue(v){
+    return !!(v && typeof v==="object" && v._v===1);
+  }
+  function tag(obj){
+    return Object.assign({},obj,{_v:1});
+  }
+
+  function remoteMapToArray(mapOrArr,type){
     if(!mapOrArr) return [];
     if(Array.isArray(mapOrArr)) return mapOrArr;
-    return Object.entries(mapOrArr).map(([id,v])=>({id,...v}));
+    return Object.entries(mapOrArr)
+      .filter(([id,v])=>(!vMigrated||isTaggedValue(v)) && !(type&&isTombstoned(type,id)))
+      .map(([id,v])=>({id,...v}));
   }
   function arrayToRemoteMap(arr){
     const out={};
-    (arr||[]).forEach(item=>{ if(!item||!item.id) return; const {id,...rest}=item; out[id]=rest; });
+    (arr||[]).forEach(item=>{ if(!item||!item.id) return; const {id,...rest}=item; out[id]=tag(rest); });
     return out;
   }
   function remoteStaffToArray(mapOrArr){
     if(!mapOrArr) return [];
     if(Array.isArray(mapOrArr)) return mapOrArr;
-    return Object.keys(mapOrArr).map(k=>decodeURIComponent(k));
+    return Object.entries(mapOrArr)
+      .filter(([k,v])=>(!vMigrated||isTaggedValue(v)) && !isTombstoned("staff",decodeURIComponent(k)))
+      .map(([k])=>decodeURIComponent(k));
   }
   function staffArrayToRemoteMap(arr){
     const out={};
-    (arr||[]).forEach(name=>{ out[fbKey(name)]=true; });
+    (arr||[]).forEach(name=>{ out[fbKey(name)]={_v:1}; });
     return out;
   }
   function remoteDailyToLocal(mapObj){
     const out={};
     if(!mapObj) return out;
     Object.entries(mapObj).forEach(([date,v])=>{
-      const memosArr=Array.isArray(v.memos)?v.memos:Object.entries(v.memos||{}).map(([id,m])=>({id,...m}));
+      let memosArr;
+      if(Array.isArray(v.memos)){
+        memosArr=v.memos;
+      }else{
+        memosArr=Object.entries(v.memos||{})
+          .filter(([id,m])=>(!vMigrated||isTaggedValue(m)) && !isTombstoned("dailyMemos",id))
+          .map(([id,m])=>({id,...m}));
+      }
       out[date]={memos:memosArr, read:!!v.read, readAt:v.readAt||null};
     });
     return out;
@@ -535,10 +571,22 @@
     const out={};
     Object.entries(obj||{}).forEach(([date,entry])=>{
       const memosMap={};
-      (entry.memos||[]).forEach(m=>{ if(!m||!m.id) return; const {id,...rest}=m; memosMap[id]=rest; });
+      (entry.memos||[]).forEach(m=>{ if(!m||!m.id) return; const {id,...rest}=m; memosMap[id]=tag(rest); });
       out[date]={memos:memosMap, read:!!entry.read, readAt:entry.readAt||null};
     });
     return out;
+  }
+
+  function migrateToTaggedFormat(){
+    // 既存データ(まだ目印の付いていないもの)を、今の内容のまま新形式で書き戻す。
+    staff.forEach(name=>{ fbPut(`/staff/${fbKey(name)}`,{_v:1}); });
+    general.forEach(g=>{ fbPatch(`/general/${g.id}`,{_v:1}); });
+    personal.forEach(p=>{ fbPatch(`/personal/${p.id}`,{_v:1}); });
+    Object.keys(daily).forEach(date=>{
+      (daily[date].memos||[]).forEach(m=>{ fbPatch(`/daily/${date}/memos/${m.id}`,{_v:1}); });
+    });
+    vMigrated=true;
+    localStorage.setItem(V_MIGRATED_KEY,"1");
   }
 
   function mergeStaffLists(local,remote){
@@ -549,10 +597,10 @@
     });
     return out;
   }
-  function mergeById(local,remote){
-    const remoteArr=remoteMapToArray(remote);
+  function mergeById(local,remote,type){
+    const remoteArr=remoteMapToArray(remote,type);
     const map=new Map();
-    [...(local||[]),...remoteArr].forEach(item=>{ if(item&&item.id) map.set(item.id,item); });
+    [...(local||[]),...remoteArr].forEach(item=>{ if(item&&item.id&&!(type&&isTombstoned(type,item.id))) map.set(item.id,item); });
     return Array.from(map.values());
   }
   function mergeDailyMaps(local,remote){
@@ -563,7 +611,7 @@
       const l=(local&&local[d])||{memos:[],read:false,readAt:null};
       const r=remoteConverted[d]||{memos:[],read:false,readAt:null};
       out[d]={
-        memos:mergeById(l.memos,r.memos),
+        memos:mergeById(l.memos,r.memos,"dailyMemos"),
         read:!!(l.read||r.read),
         readAt:(r.read?r.readAt:l.readAt)||l.readAt||r.readAt||null
       };
@@ -617,7 +665,7 @@
       let merged;
       if(key==="staff") merged=mergeStaffLists(staff,remoteValue);
       else if(key==="daily") merged=mergeDailyMaps(daily,remoteValue);
-      else merged=mergeById(key==="general"?general:personal,remoteValue);
+      else merged=mergeById(key==="general"?general:personal,remoteValue,key);
       applyLocalData(key,merged);
       if(key==="staff") fbPut("/staff",staffArrayToRemoteMap(merged));
       else if(key==="daily") fbPut("/daily",localDailyToRemote(merged));
@@ -630,23 +678,12 @@
         onRemoteUpdate(key);
         return;
       }
-      if(key!=="daily" && Array.isArray(remoteValue)){
-        // 古いバージョンの端末が丸ごと配列で書き込んだと思われる。
-        // そのまま置き換えると他端末の変更(削除など)が消えてしまうので、
-        // 上書きせずマージしてから新しい形式で書き戻す。
-        let merged;
-        if(key==="staff") merged=mergeStaffLists(staff,remoteValue);
-        else merged=mergeById(key==="general"?general:personal,remoteValue);
-        applyLocalData(key,merged);
-        if(key==="staff") fbPut("/staff",staffArrayToRemoteMap(merged));
-        else fbPut("/"+key,arrayToRemoteMap(merged));
-        onRemoteUpdate(key);
-        return;
-      }
+      // 親データ(クラウド)をそのまま信じる。古い端末が配列形式で丸ごと
+      // 書き込んできてもマージはせず、親データの内容をそのまま採用する。
       let converted;
       if(key==="staff") converted=remoteStaffToArray(remoteValue);
       else if(key==="daily") converted=remoteDailyToLocal(remoteValue);
-      else converted=remoteMapToArray(remoteValue);
+      else converted=remoteMapToArray(remoteValue,key);
       applyLocalData(key,converted);
     }
     onRemoteUpdate(key);
@@ -686,6 +723,7 @@
       checkVersion(obj.appVersion);
       SYNC_KEYS.forEach(k=>applyRemoteOrSeed(k,obj[k]));
       if(!everSyncedOnce){ everSyncedOnce=true; localStorage.setItem(SYNCED_ONCE_KEY,"1"); }
+      if(!vMigrated) migrateToTaggedFormat();
       return;
     }
 
@@ -708,7 +746,7 @@
     if(key==="staff" && parts.length===2){
       const name=decodeURIComponent(parts[1]);
       if(data===null){ staff=staff.filter(n=>n!==name); }
-      else if(!staff.includes(name)){ staff.push(name); }
+      else if((!vMigrated||isTaggedValue(data)) && !isTombstoned("staff",name) && !staff.includes(name)){ staff.push(name); }
       saveJSON(STAFF_KEY,staff);
     }
     else if((key==="general"||key==="personal") && parts.length===2){
@@ -716,7 +754,7 @@
       let arr=key==="general"?general:personal;
       if(data===null){
         arr=arr.filter(x=>x.id!==id);
-      }else{
+      }else if((!vMigrated||isTaggedValue(data)) && !isTombstoned(key,id)){
         const conv={id,...data};
         if(key==="general" && !Array.isArray(conv.seenBy)) conv.seenBy=[];
         if(!Array.isArray(conv.comments)) conv.comments=[];
@@ -745,7 +783,9 @@
         if(data.read!==undefined) entry.read=!!data.read;
         if(data.readAt!==undefined) entry.readAt=data.readAt||null;
         if(data.memos!==undefined){
-          entry.memos=Array.isArray(data.memos)?data.memos:Object.entries(data.memos||{}).map(([id,m])=>({id,...m}));
+          entry.memos=Array.isArray(data.memos)?data.memos:Object.entries(data.memos||{})
+            .filter(([id,m])=>!vMigrated||isTaggedValue(m))
+            .map(([id,m])=>({id,...m}));
         }
       }
       saveJSON(DAILY_KEY,daily);
@@ -761,7 +801,7 @@
       const date=parts[1], memoId=parts[3];
       const entry=dayEntry(date);
       if(data===null){ entry.memos=entry.memos.filter(m=>m.id!==memoId); }
-      else{
+      else if((!vMigrated||isTaggedValue(data)) && !isTombstoned("dailyMemos",memoId)){
         const conv={id:memoId,...data};
         const idx=entry.memos.findIndex(m=>m.id===memoId);
         if(idx===-1) entry.memos.push(conv); else entry.memos[idx]=conv;
@@ -788,7 +828,9 @@
     document.addEventListener("visibilitychange",()=>{
       if(document.visibilityState==="visible") connectSync();
     });
-    window.addEventListener("pageshow",()=>connectSync());
+    // pageshowは通常の初回読み込みでも発火してしまい、起動直後の接続と二重になるので、
+    // bfcacheからの復元(persisted)の時だけ再接続する。
+    window.addEventListener("pageshow",(e)=>{ if(e.persisted) connectSync(); });
     window.addEventListener("online",()=>connectSync());
   }
 
@@ -933,6 +975,7 @@
         const id=btn.dataset.id;
         entry.memos=entry.memos.filter(m=>m.id!==id);
         saveDaily();
+        addTombstone("dailyMemos",id);
         fbDelete(`/daily/${currentDay}/memos/${id}`);
         renderWriteSection();
         renderCalendar();
@@ -976,7 +1019,7 @@
           toast("保存に失敗しました(容量不足の可能性があります)");
           return;
         }
-        fbPut(`/daily/${currentDay}/memos/${m.id}`,{text:m.text,createdAt:m.createdAt,photo:m.photo||null});
+        fbPut(`/daily/${currentDay}/memos/${m.id}`,tag({text:m.text,createdAt:m.createdAt,photo:m.photo||null}));
         editingDailyId=null;
         editingDailyPhoto=null;
         renderWriteSection();
@@ -1064,7 +1107,7 @@
       toast("保存に失敗しました(容量不足の可能性があります)");
       return;
     }
-    fbPut(`/daily/${currentDay}/memos/${memo.id}`,{text:memo.text,createdAt:memo.createdAt,photo:memo.photo||null});
+    fbPut(`/daily/${currentDay}/memos/${memo.id}`,tag({text:memo.text,createdAt:memo.createdAt,photo:memo.photo||null}));
     ta.value="";
     dailyPhotoData=null;
     renderDailyPhotoPreview();
@@ -1247,7 +1290,7 @@
     }
     {
       const {id,...rest}=item;
-      fbPut(`/general/${id}`,rest);
+      fbPut(`/general/${id}`,tag(rest));
     }
     subjEl.value="";
     contEl.value="";
@@ -1299,6 +1342,7 @@
     const id=openGeneralId;
     general=general.filter(g=>g.id!==id);
     saveGeneral();
+    addTombstone("general",id);
     fbDelete(`/general/${id}`);
     openGeneralId=null;
     renderGeneralList();
@@ -1410,6 +1454,7 @@
         const id=btn.dataset.id;
         personal=personal.filter(p=>p.id!==id);
         savePersonal();
+        addTombstone("personal",id);
         fbDelete(`/personal/${id}`);
         renderPersonal();
       };
@@ -1531,7 +1576,7 @@
     }
     {
       const {id,...rest}=item;
-      fbPut(`/personal/${id}`,rest);
+      fbPut(`/personal/${id}`,tag(rest));
     }
     textEl.value="";
     perPhotoData=null;
@@ -1559,6 +1604,7 @@
         if(!confirm(`「${name}」を削除しますか？`)) return;
         staff=staff.filter(n=>n!==name);
         saveStaff();
+        addTombstone("staff",name);
         fbDelete(`/staff/${fbKey(name)}`);
         renderStaff();
       };
@@ -1573,7 +1619,8 @@
     staff.push(name);
     input.value="";
     saveStaff();
-    fbPut(`/staff/${fbKey(name)}`,true);
+    removeTombstone("staff",name);
+    fbPut(`/staff/${fbKey(name)}`,{_v:1});
     renderStaff();
     toast("追加しました");
   };
