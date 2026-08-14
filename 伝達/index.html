@@ -344,7 +344,7 @@
   const PERSONAL_KEY="tsutae_personal_v1";
   const WEEKDAYS=["日","月","火","水","木","金","土"];
   const FIREBASE_BASE="https://kagurazyu-dentatsu-default-rtdb.asia-southeast1.firebasedatabase.app";
-  const APP_VERSION="20260814d";
+  const APP_VERSION="20260814e";
 
   const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,6);
   const p2=n=>String(n).padStart(2,"0");
@@ -542,9 +542,17 @@
   function remoteStaffToArray(mapOrArr){
     if(!mapOrArr) return [];
     if(Array.isArray(mapOrArr)) return mapOrArr;
-    return Object.entries(mapOrArr)
+    // Firebase側の一覧取得で、同じ名前が(エンコード違いなどで)複数のキーとして
+    // 返ってくることがあるため、デコード後の名前で重複を除去する。
+    const seen=new Set();
+    const out=[];
+    Object.entries(mapOrArr)
       .filter(([k,v])=>(!vMigrated||isTaggedValue(v)) && !isTombstoned("staff",decodeURIComponent(k)))
-      .map(([k])=>decodeURIComponent(k));
+      .forEach(([k])=>{
+        const name=decodeURIComponent(k);
+        if(!seen.has(name)){ seen.add(name); out.push(name); }
+      });
+    return out;
   }
   function staffArrayToRemoteMap(arr){
     const out={};
