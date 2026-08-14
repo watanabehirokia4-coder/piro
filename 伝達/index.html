@@ -344,7 +344,7 @@
   const PERSONAL_KEY="tsutae_personal_v1";
   const WEEKDAYS=["日","月","火","水","木","金","土"];
   const FIREBASE_BASE="https://kagurazyu-dentatsu-default-rtdb.asia-southeast1.firebasedatabase.app";
-  const APP_VERSION="20260814a";
+  const APP_VERSION="20260814b";
 
   const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,6);
   const p2=n=>String(n).padStart(2,"0");
@@ -468,22 +468,38 @@
     const key=path.replace(/^\//,"").split("/")[0];
     if(Object.prototype.hasOwnProperty.call(lastLocalWrite,key)) lastLocalWrite[key]=Date.now();
   }
+  // 送信中の書き込みを覚えておき、画面更新ボタンなどで再読み込みする前に
+  // 完了を待てるようにする(送信途中でページ遷移すると通信ごと中断され、
+  // 削除などが届かないまま古い状態を読み直してしまうため)。
+  let pendingWrites=[];
+  function trackWrite(p){
+    pendingWrites.push(p);
+    p.finally(()=>{ pendingWrites=pendingWrites.filter(x=>x!==p); });
+    return p;
+  }
+  async function waitForPendingWrites(timeoutMs){
+    if(!pendingWrites.length) return;
+    await Promise.race([
+      Promise.allSettled(pendingWrites),
+      new Promise(resolve=>setTimeout(resolve,timeoutMs))
+    ]);
+  }
   function fbPut(path,value){
     fbTouch(path);
-    return fetch(`${FIREBASE_BASE}${path}.json`,{
+    return trackWrite(fetch(`${FIREBASE_BASE}${path}.json`,{
       method:"PUT", headers:{"Content-Type":"application/json"}, body:JSON.stringify(value)
-    }).catch(()=>{ toast("オフラインのためこの端末にのみ保存しました"); });
+    }).catch(()=>{ toast("オフラインのためこの端末にのみ保存しました"); }));
   }
   function fbPatch(path,value){
     fbTouch(path);
-    return fetch(`${FIREBASE_BASE}${path}.json`,{
+    return trackWrite(fetch(`${FIREBASE_BASE}${path}.json`,{
       method:"PATCH", headers:{"Content-Type":"application/json"}, body:JSON.stringify(value)
-    }).catch(()=>{ toast("オフラインのためこの端末にのみ保存しました"); });
+    }).catch(()=>{ toast("オフラインのためこの端末にのみ保存しました"); }));
   }
   function fbDelete(path){
     fbTouch(path);
-    return fetch(`${FIREBASE_BASE}${path}.json`,{method:"DELETE"})
-      .catch(()=>{ toast("オフラインのためこの端末にのみ保存しました"); });
+    return trackWrite(fetch(`${FIREBASE_BASE}${path}.json`,{method:"DELETE"})
+      .catch(()=>{ toast("オフラインのためこの端末にのみ保存しました"); }));
   }
 
   function remoteMapToArray(mapOrArr){
@@ -641,10 +657,15 @@
   // 開発側が明示的に更新する(端末側からは絶対に書き込まない)。端末はこれを見て、
   // 自分が古いバージョンのまま繋がっていたら自動で強制的に再読み込みする。
   // (古い端末がキャッシュを残したまま、手元の古い情報をクラウドへ書き戻してしまう問題への対策)
+  async function hardReload(){
+    await waitForPendingWrites(3000);
+    location.href=location.pathname+"?_="+Date.now();
+  }
+
   function checkVersion(remoteVersion){
     if(remoteVersion && remoteVersion!==APP_VERSION){
       toast("新しいバージョンに更新します…");
-      setTimeout(()=>{ location.href=location.pathname+"?_="+Date.now(); },1200);
+      setTimeout(hardReload,1200);
     }
   }
 
@@ -1552,7 +1573,8 @@
   };
 
   document.getElementById("reloadApp").onclick=()=>{
-    location.href=location.pathname+"?_="+Date.now();
+    if(pendingWrites.length) toast("保存中の内容を送信しています…");
+    hardReload();
   };
 
   // ---------- init ----------
