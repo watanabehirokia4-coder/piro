@@ -587,9 +587,14 @@
   const SYNC_KEYS=["staff","daily","general","personal"];
   let firstSyncDone={staff:false,daily:false,general:false,personal:false};
   let everConnected=false;
+  // この端末で一度でも同期が完了したことがあるか(ページ再読み込みをまたいで記憶する)。
+  // これが無いと、更新ボタンを押すたびに「初回同期」扱いになり、端末側の古いデータと
+  // クラウドを毎回マージ(足し算)してしまい、削除した項目が復活する原因になっていた。
+  const SYNCED_ONCE_KEY="tsutae_synced_once_v1";
+  let everSyncedOnce=localStorage.getItem(SYNCED_ONCE_KEY)==="1";
 
   function applyRemoteOrSeed(key,remoteValue){
-    if(!firstSyncDone[key]){
+    if(!firstSyncDone[key] && !everSyncedOnce){
       firstSyncDone[key]=true;
       let merged;
       if(key==="staff") merged=mergeStaffLists(staff,remoteValue);
@@ -600,6 +605,7 @@
       else if(key==="daily") fbPut("/daily",localDailyToRemote(merged));
       else fbPut("/"+key,arrayToRemoteMap(merged));
     }else{
+      firstSyncDone[key]=true;
       if(Date.now()-lastLocalWrite[key]<LOCAL_WRITE_GRACE_MS){
         // 直近このキーへ自分で書き込んだばかりなので、再接続時の古いスナップショットで
         // 上書きしない(反映済みの個別patchイベントの方を信用する)
@@ -637,6 +643,7 @@
       if(!everConnected){ everConnected=true; toast("他端末と同期しました"); }
       const obj=(data&&typeof data==="object")?data:{};
       SYNC_KEYS.forEach(k=>applyRemoteOrSeed(k,obj[k]));
+      if(!everSyncedOnce){ everSyncedOnce=true; localStorage.setItem(SYNCED_ONCE_KEY,"1"); }
       return;
     }
 
