@@ -344,7 +344,7 @@
   const PERSONAL_KEY="tsutae_personal_v1";
   const WEEKDAYS=["日","月","火","水","木","金","土"];
   const FIREBASE_BASE="https://kagurazyu-dentatsu-default-rtdb.asia-southeast1.firebasedatabase.app";
-  const APP_VERSION="20260814f";
+  const APP_VERSION="20260814g";
 
   const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,6);
   const p2=n=>String(n).padStart(2,"0");
@@ -463,10 +463,26 @@
     }
   };
 
+  // 端末のローカル保存(localStorage)は容量が限られているため、写真データは
+  // ここには保存しない(表示中はメモリ上のデータでそのまま見える。次回起動時は
+  // クラウドから写真付きで再取得される)。写真の有無に関わらず容量不足で
+  // 保存自体が失敗するのを防ぐための措置。
+  function stripPhoto(item){
+    if(item && item.photo){ const {photo,...rest}=item; return rest; }
+    return item;
+  }
+  function stripDailyPhotos(dailyObj){
+    const out={};
+    Object.entries(dailyObj||{}).forEach(([date,entry])=>{
+      out[date]=Object.assign({},entry,{memos:(entry.memos||[]).map(stripPhoto)});
+    });
+    return out;
+  }
+
   function saveStaff(){saveJSON(STAFF_KEY,staff);}
-  function saveDaily(){saveJSON(DAILY_KEY,daily);}
-  function saveGeneral(){saveJSON(GENERAL_KEY,general);}
-  function savePersonal(){saveJSON(PERSONAL_KEY,personal);}
+  function saveDaily(){saveJSON(DAILY_KEY,stripDailyPhotos(daily));}
+  function saveGeneral(){saveJSON(GENERAL_KEY,general.map(stripPhoto));}
+  function savePersonal(){saveJSON(PERSONAL_KEY,personal.map(stripPhoto));}
 
   // ---------- クラウド同期(Firebase Realtime Database) ----------
   // 全体を丸ごと書き込むと複数端末が同時に保存した時に片方の変更が消えるため、
@@ -629,9 +645,9 @@
 
   function applyLocalData(key,value){
     if(key==="staff"){ staff=value||[]; saveJSON(STAFF_KEY,staff); }
-    if(key==="daily"){ daily=value||{}; saveJSON(DAILY_KEY,daily); }
-    if(key==="general"){ general=value||[]; general.forEach(g=>{ if(!Array.isArray(g.seenBy)) g.seenBy=[]; if(!Array.isArray(g.comments)) g.comments=[]; }); saveJSON(GENERAL_KEY,general); }
-    if(key==="personal"){ personal=value||[]; personal.forEach(p=>{ if(!Array.isArray(p.comments)) p.comments=[]; }); saveJSON(PERSONAL_KEY,personal); }
+    if(key==="daily"){ daily=value||{}; saveJSON(DAILY_KEY,stripDailyPhotos(daily)); }
+    if(key==="general"){ general=value||[]; general.forEach(g=>{ if(!Array.isArray(g.seenBy)) g.seenBy=[]; if(!Array.isArray(g.comments)) g.comments=[]; }); saveJSON(GENERAL_KEY,general.map(stripPhoto)); }
+    if(key==="personal"){ personal=value||[]; personal.forEach(p=>{ if(!Array.isArray(p.comments)) p.comments=[]; }); saveJSON(PERSONAL_KEY,personal.map(stripPhoto)); }
   }
 
   function currentView(){
@@ -769,8 +785,8 @@
         const idx=arr.findIndex(x=>x.id===id);
         if(idx===-1){ arr=[...arr,conv]; } else { arr=[...arr]; arr[idx]=conv; }
       }
-      if(key==="general"){ general=arr; saveJSON(GENERAL_KEY,general); }
-      else{ personal=arr; saveJSON(PERSONAL_KEY,personal); }
+      if(key==="general"){ general=arr; saveJSON(GENERAL_KEY,general.map(stripPhoto)); }
+      else{ personal=arr; saveJSON(PERSONAL_KEY,personal.map(stripPhoto)); }
     }
     else if((key==="general"||key==="personal") && parts.length===3){
       const id=parts[1]; const field=parts[2];
@@ -780,7 +796,7 @@
         item[field]=data;
         if(field==="seenBy" && !Array.isArray(item.seenBy)) item.seenBy=[];
         if(field==="comments" && !Array.isArray(item.comments)) item.comments=[];
-        saveJSON(key==="general"?GENERAL_KEY:PERSONAL_KEY, arr);
+        saveJSON(key==="general"?GENERAL_KEY:PERSONAL_KEY, arr.map(stripPhoto));
       }
     }
     else if(key==="daily" && parts.length===2){
@@ -796,14 +812,14 @@
             .map(([id,m])=>({id,...m}));
         }
       }
-      saveJSON(DAILY_KEY,daily);
+      saveJSON(DAILY_KEY,stripDailyPhotos(daily));
     }
     else if(key==="daily" && parts.length===3){
       const date=parts[1]; const field=parts[2];
       const entry=dayEntry(date);
       if(field==="read") entry.read=!!data;
       if(field==="readAt") entry.readAt=data||null;
-      saveJSON(DAILY_KEY,daily);
+      saveJSON(DAILY_KEY,stripDailyPhotos(daily));
     }
     else if(key==="daily" && parts.length===4 && parts[2]==="memos"){
       const date=parts[1], memoId=parts[3];
@@ -814,7 +830,7 @@
         const idx=entry.memos.findIndex(m=>m.id===memoId);
         if(idx===-1) entry.memos.push(conv); else entry.memos[idx]=conv;
       }
-      saveJSON(DAILY_KEY,daily);
+      saveJSON(DAILY_KEY,stripDailyPhotos(daily));
     }
     onRemoteUpdate(key);
   }
