@@ -344,7 +344,7 @@
   const PERSONAL_KEY="tsutae_personal_v1";
   const WEEKDAYS=["日","月","火","水","木","金","土"];
   const FIREBASE_BASE="https://kagurazyu-dentatsu-default-rtdb.asia-southeast1.firebasedatabase.app";
-  const APP_VERSION="20260814e";
+  const APP_VERSION="20260814f";
 
   const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,6);
   const p2=n=>String(n).padStart(2,"0");
@@ -1204,16 +1204,6 @@
         const active=g.seenBy.includes(name);
         return `<div class="chip ${active?"active":""}" data-name="${escapeHtml(name)}">${active?'<span class="mark">✓</span>':""}${escapeHtml(name)}</div>`;
       }).join("");
-      chips.querySelectorAll(".chip").forEach(c=>{
-        c.onclick=()=>{
-          const name=c.dataset.name;
-          const idx=g.seenBy.indexOf(name);
-          if(idx===-1) g.seenBy.push(name); else g.seenBy.splice(idx,1);
-          saveGeneral();
-          fbPut(`/general/${g.id}/seenBy`,g.seenBy);
-          renderGeneralDetail();
-        };
-      });
     }
 
     if(!Array.isArray(g.comments)) g.comments=[];
@@ -1230,6 +1220,24 @@
     }
     document.getElementById("genCommentAuthor").innerHTML=staffOptionsHtml();
   }
+
+  // チップ要素は他端末からの更新のたびに作り直されるため、要素ごとにonclickを
+  // 付け直す方式だとタップの瞬間に要素が入れ替わって反応しないことがある(特にスマホで顕著)。
+  // 親要素(常に同じ要素のまま)に1回だけイベントを仕込み、どの子要素がタップされたかを
+  // 都度判定する方式にすることで、作り直しの影響を受けないようにする。
+  document.getElementById("genSeenChips").onclick=(e)=>{
+    const chipEl=e.target.closest(".chip");
+    if(!chipEl) return;
+    const g=general.find(x=>x.id===openGeneralId);
+    if(!g) return;
+    if(!Array.isArray(g.seenBy)) g.seenBy=[];
+    const name=chipEl.dataset.name;
+    const idx=g.seenBy.indexOf(name);
+    if(idx===-1) g.seenBy.push(name); else g.seenBy.splice(idx,1);
+    saveGeneral();
+    fbPut(`/general/${g.id}/seenBy`,g.seenBy);
+    renderGeneralDetail();
+  };
 
   document.getElementById("genCommentAdd").onclick=()=>{
     const g=general.find(x=>x.id===openGeneralId);
