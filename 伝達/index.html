@@ -60,12 +60,14 @@
   .btn.block{width:100%;}
   .btn.sm{padding:7px 12px; font-size:13px; border-radius:9px;}
   .btn.danger{background:transparent; border:1px solid var(--red); color:var(--red);}
+  .btn.danger.confirm-armed{background:var(--red); color:#fff;}
 
   .row{display:flex; gap:10px; align-items:center;}
   .row.between{justify-content:space-between;}
   .row.wrap{flex-wrap:wrap;}
 
   .icon-btn{background:none; border:none; color:var(--sub); font-size:18px; cursor:pointer; padding:6px 10px; border-radius:8px; flex-shrink:0;}
+  .icon-btn:disabled{opacity:.25; cursor:default;}
   .icon-btn:active{background:var(--card3); color:var(--text);}
 
   .chips{display:flex; flex-wrap:wrap; gap:7px;}
@@ -79,7 +81,8 @@
   .memo-item .txt{white-space:pre-wrap; font-size:14.5px; word-break:break-word;}
   .memo-item .del{color:var(--sub); background:none; border:none; font-size:13px; cursor:pointer; padding:2px 4px;}
   .memo-item .del:active{color:var(--red);}
-  .memo-item .edit,.personal-item .edit{color:var(--accent); background:none; border:none; font-size:13px; cursor:pointer; padding:2px 4px; margin-right:6px;}
+  .memo-item .edit,.personal-item .edit,.staff-item .edit{color:var(--accent); background:none; border:none; font-size:13px; cursor:pointer; padding:2px 4px; margin-right:6px;}
+  .staff-item.editing{border-color:var(--accent); gap:8px;}
   .edit-actions{display:flex; gap:8px; margin-top:10px;}
 
   .empty{color:var(--sub); font-size:13.5px; text-align:center; padding:22px 10px;}
@@ -244,6 +247,11 @@
         <button class="btn danger sm" id="genDelete">削除</button>
       </div>
       <div class="card" id="genDetailReadView">
+        <div class="row between" style="margin-bottom:10px;">
+          <button class="icon-btn" id="genPrev">◀</button>
+          <span style="font-size:12px; color:var(--sub);" id="genPosLabel"></span>
+          <button class="icon-btn" id="genNext">▶</button>
+        </div>
         <h2 id="genDetailSubject" style="font-size:18px; color:var(--text);"></h2>
         <div class="detail-content" id="genDetailContent"></div>
         <div class="detail-photo" id="genDetailPhoto" style="display:none;"></div>
@@ -344,7 +352,7 @@
   const PERSONAL_KEY="tsutae_personal_v1";
   const WEEKDAYS=["日","月","火","水","木","金","土"];
   const FIREBASE_BASE="https://kagurazyu-dentatsu-default-rtdb.asia-southeast1.firebasedatabase.app";
-  const APP_VERSION="20260814g";
+  const APP_VERSION="20260815a";
 
   const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,6);
   const p2=n=>String(n).padStart(2,"0");
@@ -866,6 +874,32 @@
     toast._t=setTimeout(()=>t.classList.remove("show"),1600);
   }
 
+  // ---------- 削除の2段階確認 ----------
+  // 1回目のタップでボタンが「本当に削除」に変わり、3秒以内に同じボタンを
+  // もう一度タップすると実際に削除される。何もしなければ元に戻る。
+  let armedDeleteBtn=null, armedDeleteTimer=null;
+  function disarmDelete(){
+    if(armedDeleteBtn){
+      armedDeleteBtn.textContent=armedDeleteBtn.dataset.origText||"削除";
+      armedDeleteBtn.classList.remove("confirm-armed");
+    }
+    clearTimeout(armedDeleteTimer);
+    armedDeleteBtn=null;
+  }
+  function confirmDelete(btn,onConfirm){
+    if(armedDeleteBtn===btn){
+      disarmDelete();
+      onConfirm();
+      return;
+    }
+    disarmDelete();
+    armedDeleteBtn=btn;
+    btn.dataset.origText=btn.textContent;
+    btn.textContent="本当に削除";
+    btn.classList.add("confirm-armed");
+    armedDeleteTimer=setTimeout(disarmDelete,3000);
+  }
+
   function staffOptionsHtml(){
     if(!staff.length) return `<option value="">スタッフを追加してください</option>`;
     return staff.map(n=>`<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join("");
@@ -995,7 +1029,7 @@
     if(editingDailyId) renderPhotoEditRow("editDailyPhotoRow","daily");
 
     list.querySelectorAll(".del").forEach(btn=>{
-      btn.onclick=()=>{
+      btn.onclick=()=>confirmDelete(btn,()=>{
         const id=btn.dataset.id;
         entry.memos=entry.memos.filter(m=>m.id!==id);
         saveDaily();
@@ -1004,7 +1038,7 @@
         renderWriteSection();
         renderCalendar();
         if(currentDay===todayStr()) renderTodayCard();
-      };
+      });
     });
     list.querySelectorAll(".item-photo").forEach(el=>{
       el.onclick=()=>{
@@ -1183,6 +1217,18 @@
     renderGeneralDetail();
   }
 
+  function generalSortedList(){
+    return [...general].sort((a,b)=>b.createdAt-a.createdAt);
+  }
+  function navigateGeneral(delta){
+    const list=generalSortedList();
+    const idx=list.findIndex(g=>g.id===openGeneralId);
+    if(idx===-1) return;
+    const newIdx=idx+delta;
+    if(newIdx<0||newIdx>=list.length) return;
+    openGeneralDetail(list[newIdx].id);
+  }
+
   function renderGeneralDetail(){
     const g=general.find(x=>x.id===openGeneralId);
     if(!g){ renderGeneralList(); return; }
@@ -1197,6 +1243,14 @@
       document.getElementById("genEditContent").value=g.content;
       renderPhotoEditRow("genEditPhotoRow","general");
       return;
+    }
+
+    {
+      const list=generalSortedList();
+      const idx=list.findIndex(x=>x.id===openGeneralId);
+      document.getElementById("genPosLabel").textContent=idx===-1?"":`${idx+1} / ${list.length}`;
+      document.getElementById("genPrev").disabled=idx<=0;
+      document.getElementById("genNext").disabled=idx===-1||idx>=list.length-1;
     }
 
     document.getElementById("genDetailSubject").textContent=g.subject||"(件名なし)";
@@ -1369,8 +1423,30 @@
   };
 
   document.getElementById("genBack").onclick=()=>{ openGeneralId=null; renderGeneralList(); };
-  document.getElementById("genDelete").onclick=()=>{
-    if(!confirm("この伝達を削除しますか？")) return;
+  document.getElementById("genPrev").onclick=()=>navigateGeneral(-1);
+  document.getElementById("genNext").onclick=()=>navigateGeneral(1);
+
+  // 一覧を介さず、横スワイプで前後の伝達に移動できるようにする。
+  {
+    let touchStartX=null, touchStartY=null;
+    const swipeArea=document.getElementById("genDetailReadView");
+    swipeArea.addEventListener("touchstart",(e)=>{
+      if(e.touches.length!==1) return;
+      touchStartX=e.touches[0].clientX;
+      touchStartY=e.touches[0].clientY;
+    },{passive:true});
+    swipeArea.addEventListener("touchend",(e)=>{
+      if(touchStartX===null) return;
+      const touch=e.changedTouches[0];
+      const dx=touch.clientX-touchStartX;
+      const dy=touch.clientY-touchStartY;
+      touchStartX=null; touchStartY=null;
+      if(Math.abs(dx)>60 && Math.abs(dx)>Math.abs(dy)*1.5){
+        navigateGeneral(dx<0?1:-1);
+      }
+    },{passive:true});
+  }
+  document.getElementById("genDelete").onclick=()=>confirmDelete(document.getElementById("genDelete"),()=>{
     const id=openGeneralId;
     general=general.filter(g=>g.id!==id);
     saveGeneral();
@@ -1378,7 +1454,7 @@
     fbDelete(`/general/${id}`);
     openGeneralId=null;
     renderGeneralList();
-  };
+  });
 
   // ---------- 個人伝達 ----------
   function renderPersonal(){
@@ -1482,14 +1558,14 @@
       };
     });
     list.querySelectorAll(".del").forEach(btn=>{
-      btn.onclick=()=>{
+      btn.onclick=()=>confirmDelete(btn,()=>{
         const id=btn.dataset.id;
         personal=personal.filter(p=>p.id!==id);
         savePersonal();
         addTombstone("personal",id);
         fbDelete(`/personal/${id}`);
         renderPersonal();
-      };
+      });
     });
     list.querySelectorAll("[data-edit-personal]").forEach(btn=>{
       btn.onclick=()=>{
@@ -1618,29 +1694,118 @@
   };
 
   // ---------- スタッフ管理 ----------
+  let editingStaffName=null;
+
   function renderStaff(){
     const list=document.getElementById("staffList");
     if(!staff.length){
       list.innerHTML=`<div class="empty">スタッフが登録されていません</div>`;
       return;
     }
-    list.innerHTML=staff.map(n=>`
-      <div class="staff-item">
-        <span class="name">${escapeHtml(n)}</span>
-        <button class="btn danger sm" data-name="${escapeHtml(n)}">削除</button>
-      </div>
-    `).join("");
+    list.innerHTML=staff.map(n=>{
+      if(n===editingStaffName){
+        return `
+          <div class="staff-item editing">
+            <input type="text" id="editStaffNameInput" value="${escapeHtml(n)}" style="flex:1;">
+            <button class="btn sm" data-save-staff="${escapeHtml(n)}">保存</button>
+            <button class="btn ghost sm" data-cancel-staff="1">キャンセル</button>
+          </div>
+        `;
+      }
+      return `
+        <div class="staff-item">
+          <span class="name">${escapeHtml(n)}</span>
+          <span>
+            <button class="edit" data-edit-staff="${escapeHtml(n)}">編集</button>
+            <button class="btn danger sm" data-name="${escapeHtml(n)}">削除</button>
+          </span>
+        </div>
+      `;
+    }).join("");
+
     list.querySelectorAll("button[data-name]").forEach(btn=>{
-      btn.onclick=()=>{
+      btn.onclick=()=>confirmDelete(btn,()=>{
         const name=btn.dataset.name;
-        if(!confirm(`「${name}」を削除しますか？`)) return;
         staff=staff.filter(n=>n!==name);
         saveStaff();
         addTombstone("staff",name);
         fbDelete(`/staff/${fbKey(name)}`);
         renderStaff();
+      });
+    });
+    list.querySelectorAll("[data-edit-staff]").forEach(btn=>{
+      btn.onclick=()=>{
+        editingStaffName=btn.dataset.editStaff;
+        renderStaff();
       };
     });
+    list.querySelectorAll("[data-cancel-staff]").forEach(btn=>{
+      btn.onclick=()=>{
+        editingStaffName=null;
+        renderStaff();
+      };
+    });
+    list.querySelectorAll("[data-save-staff]").forEach(btn=>{
+      btn.onclick=()=>{
+        const oldName=btn.dataset.saveStaff;
+        const newName=document.getElementById("editStaffNameInput").value.trim();
+        if(!newName){ toast("名前を入力してください"); return; }
+        if(newName===oldName){ editingStaffName=null; renderStaff(); return; }
+        if(staff.includes(newName)){ toast("その名前は既に存在します"); return; }
+        editingStaffName=null;
+        renameStaff(oldName,newName);
+      };
+    });
+  }
+
+  function renameStaff(oldName,newName){
+    // スタッフ一覧を更新
+    staff=staff.map(n=>n===oldName?newName:n);
+    saveStaff();
+    addTombstone("staff",oldName);
+    removeTombstone("staff",newName);
+    fbDelete(`/staff/${fbKey(oldName)}`);
+    fbPut(`/staff/${fbKey(newName)}`,{_v:1});
+
+    // 全体伝達の作成者・既読・コメントの名前を差し替える
+    general.forEach(g=>{
+      const patch={};
+      if(g.author===oldName){ g.author=newName; patch.author=newName; }
+      if(Array.isArray(g.seenBy) && g.seenBy.includes(oldName)){
+        g.seenBy=g.seenBy.map(n=>n===oldName?newName:n);
+        fbPut(`/general/${g.id}/seenBy`,g.seenBy);
+      }
+      if(Array.isArray(g.comments)){
+        let changed=false;
+        g.comments=g.comments.map(c=>{
+          if(c.author===oldName){ changed=true; return Object.assign({},c,{author:newName}); }
+          return c;
+        });
+        if(changed) fbPut(`/general/${g.id}/comments`,g.comments);
+      }
+      if(Object.keys(patch).length) fbPatch(`/general/${g.id}`,patch);
+    });
+    saveGeneral();
+
+    // 個人伝達の差出人・宛先・コメントの名前を差し替える
+    personal.forEach(p=>{
+      const patch={};
+      if(p.from===oldName){ p.from=newName; patch.from=newName; }
+      if(p.to===oldName){ p.to=newName; patch.to=newName; }
+      if(Array.isArray(p.comments)){
+        let changed=false;
+        p.comments=p.comments.map(c=>{
+          if(c.author===oldName){ changed=true; return Object.assign({},c,{author:newName}); }
+          return c;
+        });
+        if(changed) fbPut(`/personal/${p.id}/comments`,p.comments);
+      }
+      if(Object.keys(patch).length) fbPatch(`/personal/${p.id}`,patch);
+    });
+    savePersonal();
+
+    renderStaff();
+    toast("名前を変更しました");
   }
 
   document.getElementById("staffAdd").onclick=()=>{
