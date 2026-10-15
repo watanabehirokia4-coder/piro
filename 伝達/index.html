@@ -121,15 +121,17 @@
   .detail-content{white-space:pre-wrap; font-size:15px; margin-bottom:16px; line-height:1.7;}
 
   .photo-field{margin-top:8px;}
-  .photo-preview{position:relative; display:inline-block; margin-top:10px;}
+  .photo-thumbs{display:flex; flex-wrap:wrap; gap:12px; margin-top:10px;}
+  .photo-preview{position:relative; display:inline-block;}
   .photo-preview img{max-width:140px; max-height:140px; border-radius:10px; display:block; border:1px solid var(--line); object-fit:cover;}
   .photo-remove{position:absolute; top:-8px; right:-8px; width:24px; height:24px; border-radius:50%; background:#2b2a27; color:#fff; border:none; font-size:14px; line-height:1; cursor:pointer; display:flex; align-items:center; justify-content:center;}
 
-  .detail-photo{margin:0 0 16px;}
+  .detail-photo{margin:0 0 16px; display:flex; flex-direction:column; gap:10px;}
   .detail-photo img{max-width:100%; border-radius:12px; display:block; cursor:zoom-in;}
 
-  .item-photo{margin-top:8px;}
-  .item-photo img{max-width:100%; max-height:220px; border-radius:10px; display:block; cursor:zoom-in; border:1px solid var(--line);}
+  .item-photos{margin-top:8px; display:flex; flex-wrap:wrap; gap:8px;}
+  .item-photos img{max-width:100%; max-height:220px; border-radius:10px; display:block; cursor:zoom-in; border:1px solid var(--line);}
+  .item-photos.multi img{width:calc(50% - 4px); height:140px; object-fit:cover;}
 
   .comment-list{margin-top:4px;}
   .comment-item{background:var(--card2); border:1px solid var(--line); border-radius:9px; padding:8px 10px; margin-bottom:6px;}
@@ -204,14 +206,7 @@
       <div id="writeLabel" style="font-size:15px; font-weight:700; margin-top:16px; margin-bottom:10px;"></div>
       <div id="dailyList"></div>
       <textarea id="dailyInput" placeholder="予約内容・両替の有無など&#10;（選んだ日付に向けて誰でも記入できます）"></textarea>
-      <div class="photo-field">
-        <input type="file" accept="image/*" id="dailyPhotoInput" style="display:none;">
-        <button type="button" class="btn ghost sm" id="dailyPhotoBtn">📷 写真を追加</button>
-        <div class="photo-preview" id="dailyPhotoPreview" style="display:none;">
-          <img id="dailyPhotoPreviewImg" alt="">
-          <button type="button" class="photo-remove" id="dailyPhotoRemove">×</button>
-        </div>
-      </div>
+      <div class="photo-field" id="dailyNewPhotoRow"></div>
       <button class="btn block" id="dailyAdd" style="margin-top:10px;">追記する</button>
     </div>
   </section>
@@ -224,14 +219,7 @@
         <select id="genAuthor" style="margin-bottom:8px;"></select>
         <input type="text" id="genSubject" placeholder="件名" style="margin-bottom:8px;">
         <textarea id="genContent" placeholder="内容"></textarea>
-        <div class="photo-field">
-          <input type="file" accept="image/*" id="genPhotoInput" style="display:none;">
-          <button type="button" class="btn ghost sm" id="genPhotoBtn">📷 写真を追加</button>
-          <div class="photo-preview" id="genPhotoPreview" style="display:none;">
-            <img id="genPhotoPreviewImg" alt="">
-            <button type="button" class="photo-remove" id="genPhotoRemove">×</button>
-          </div>
-        </div>
+        <div class="photo-field" id="genNewPhotoRow"></div>
         <button class="btn block" id="genAdd" style="margin-top:10px;">作成する</button>
       </div>
       <div class="card">
@@ -290,14 +278,7 @@
         <select id="perTo"></select>
       </div>
       <textarea id="perText" placeholder="一言メモ"></textarea>
-      <div class="photo-field">
-        <input type="file" accept="image/*" id="perPhotoInput" style="display:none;">
-        <button type="button" class="btn ghost sm" id="perPhotoBtn">📷 写真を追加</button>
-        <div class="photo-preview" id="perPhotoPreview" style="display:none;">
-          <img id="perPhotoPreviewImg" alt="">
-          <button type="button" class="photo-remove" id="perPhotoRemove">×</button>
-        </div>
-      </div>
+      <div class="photo-field" id="perNewPhotoRow"></div>
       <button class="btn block" id="perAdd" style="margin-top:10px;">送る</button>
     </div>
     <div class="card">
@@ -341,7 +322,7 @@
 
 <div class="toast" id="toast"></div>
 <div class="lightbox" id="lightbox"><img id="lightboxImg" alt=""></div>
-<input type="file" accept="image/*" id="editPhotoInput" style="display:none;">
+<input type="file" accept="image/*" multiple id="editPhotoInput" style="display:none;">
 
 <script>
 (function(){
@@ -352,7 +333,7 @@
   const PERSONAL_KEY="tsutae_personal_v1";
   const WEEKDAYS=["日","月","火","水","木","金","土"];
   const FIREBASE_BASE="https://kagurazyu-dentatsu-default-rtdb.asia-southeast1.firebasedatabase.app";
-  const APP_VERSION="20260815a";
+  const APP_VERSION="20260816a";
 
   const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,6);
   const p2=n=>String(n).padStart(2,"0");
@@ -388,9 +369,35 @@
   let calYear=Number(currentDay.slice(0,4));
   let calMonth=Number(currentDay.slice(5,7))-1; // 0-indexed
   let openGeneralId=null;
-  let genPhotoData=null;
-  let perPhotoData=null;
-  let dailyPhotoData=null;
+  const MAX_PHOTOS=10;
+  // 作成フォーム・編集フォームで選択中の写真(複数枚)。key = 用途
+  const photoDrafts={daily:[], general:[], personal:[], dailyNew:[], genNew:[], perNew:[]};
+  // 旧形式(photo=1枚)と新形式(photos=配列)の両方から写真の配列を取り出す
+  function getPhotos(item){
+    if(!item) return [];
+    let p=item.photos;
+    if(p && !Array.isArray(p) && typeof p==="object") p=Object.keys(p).sort((a,b)=>a-b).map(k=>p[k]);
+    if(Array.isArray(p) && p.length) return p.filter(Boolean);
+    return item.photo?[item.photo]:[];
+  }
+  // 項目に写真配列を設定(旧photoフィールドは使わない)
+  function setPhotos(item,arr){ item.photos=arr.length?[...arr]:null; item.photo=null; }
+  // 一覧表示用の写真HTML
+  function photosHtml(item){
+    const ph=getPhotos(item);
+    if(!ph.length) return "";
+    return `<div class="item-photos ${ph.length>1?"multi":""}" data-photo-owner="${item.id}">${ph.map((src,i)=>`<img src="${src}" data-idx="${i}" alt="">`).join("")}</div>`;
+  }
+  function bindPhotoClicks(root,findItem){
+    root.querySelectorAll(".item-photos").forEach(box=>{
+      box.onclick=(e)=>{
+        const img=e.target.closest("img");
+        if(!img) return;
+        const item=findItem(box.dataset.photoOwner);
+        if(item) openLightbox(getPhotos(item)[Number(img.dataset.idx)]);
+      };
+    });
+  }
 
   function readAndCompressImage(file){
     return new Promise((resolve,reject)=>{
@@ -427,30 +434,24 @@
   };
 
   // ---------- inline edit mode (shared photo picker) ----------
-  let editingDailyId=null, editingDailyPhoto=null;
-  let editingGeneral=false, editingGeneralPhoto=null;
-  let editingPersonalId=null, editingPersonalPhoto=null;
+  let editingDailyId=null;
+  let editingGeneral=false;
+  let editingPersonalId=null;
   let editPhotoContext=null, editPhotoContainerId=null;
 
-  function getEditPhoto(context){
-    if(context==="daily") return editingDailyPhoto;
-    if(context==="general") return editingGeneralPhoto;
-    if(context==="personal") return editingPersonalPhoto;
-  }
-  function setEditPhoto(context,val){
-    if(context==="daily") editingDailyPhoto=val;
-    if(context==="general") editingGeneralPhoto=val;
-    if(context==="personal") editingPersonalPhoto=val;
-  }
   function renderPhotoEditRow(containerId,context){
     const box=document.getElementById(containerId);
     if(!box) return;
-    const photo=getEditPhoto(context);
-    box.innerHTML = photo
-      ? `<div class="photo-preview"><img src="${photo}" alt=""><button type="button" class="photo-remove" data-photo-remove="1">×</button></div><button type="button" class="btn ghost sm" data-photo-change="1" style="margin-top:8px;">写真を変更</button>`
-      : `<button type="button" class="btn ghost sm" data-photo-change="1">📷 写真を追加</button>`;
-    const removeBtn=box.querySelector("[data-photo-remove]");
-    if(removeBtn) removeBtn.onclick=()=>{ setEditPhoto(context,null); renderPhotoEditRow(containerId,context); };
+    const photos=photoDrafts[context];
+    const thumbs=photos.length
+      ? `<div class="photo-thumbs">${photos.map((src,i)=>`<div class="photo-preview"><img src="${src}" alt=""><button type="button" class="photo-remove" data-photo-remove="${i}">×</button></div>`).join("")}</div>`
+      : "";
+    const full=photos.length>=MAX_PHOTOS;
+    box.innerHTML = thumbs + (full ? `<div style="font-size:12px; color:var(--sub); margin-top:8px;">写真は${MAX_PHOTOS}枚までです</div>`
+      : `<button type="button" class="btn ghost sm" data-photo-change="1" style="margin-top:${photos.length?8:0}px;">${photos.length?"📷 さらに追加":"📷 写真を追加"}</button>`);
+    box.querySelectorAll("[data-photo-remove]").forEach(btn=>{
+      btn.onclick=()=>{ photoDrafts[context].splice(Number(btn.dataset.photoRemove),1); renderPhotoEditRow(containerId,context); };
+    });
     const changeBtn=box.querySelector("[data-photo-change]");
     if(changeBtn) changeBtn.onclick=()=>{
       editPhotoContext=context;
@@ -459,16 +460,22 @@
     };
   }
   document.getElementById("editPhotoInput").onchange=async(e)=>{
-    const file=e.target.files[0];
+    const files=Array.from(e.target.files||[]);
     e.target.value="";
-    if(!file||!editPhotoContext) return;
-    try{
-      const data=await readAndCompressImage(file);
-      setEditPhoto(editPhotoContext,data);
-      renderPhotoEditRow(editPhotoContainerId,editPhotoContext);
-    }catch(err){
-      toast("写真の読み込みに失敗しました");
+    const context=editPhotoContext, containerId=editPhotoContainerId;
+    if(!files.length||!context) return;
+    let failed=false, over=false;
+    for(const file of files){
+      if(photoDrafts[context].length>=MAX_PHOTOS){ over=true; break; }
+      try{
+        photoDrafts[context].push(await readAndCompressImage(file));
+      }catch(err){
+        failed=true;
+      }
     }
+    renderPhotoEditRow(containerId,context);
+    if(failed) toast("読み込めない写真がありました");
+    else if(over) toast(`写真は${MAX_PHOTOS}枚までです`);
   };
 
   // 端末のローカル保存(localStorage)は容量が限られているため、写真データは
@@ -476,7 +483,7 @@
   // クラウドから写真付きで再取得される)。写真の有無に関わらず容量不足で
   // 保存自体が失敗するのを防ぐための措置。
   function stripPhoto(item){
-    if(item && item.photo){ const {photo,...rest}=item; return rest; }
+    if(item && (item.photo || item.photos)){ const {photo,photos,...rest}=item; return rest; }
     return item;
   }
   function stripDailyPhotos(dailyObj){
@@ -936,7 +943,7 @@
     calYear=Number(d.slice(0,4));
     calMonth=Number(d.slice(5,7))-1;
     editingDailyId=null;
-    editingDailyPhoto=null;
+    photoDrafts.daily=[];
     renderCalendar();
     renderWriteSection();
   }
@@ -968,15 +975,10 @@
         <div class="memo-item">
           <div class="meta"><span>${fmtDateTime(m.createdAt)}</span></div>
           <div class="txt">${escapeHtml(m.text)}</div>
-          ${m.photo?`<div class="item-photo" data-photo="${m.id}"><img src="${m.photo}" alt=""></div>`:""}
+          ${photosHtml(m)}
         </div>
       `).join("");
-      list.querySelectorAll(".item-photo").forEach(el=>{
-        el.onclick=()=>{
-          const m=entry.memos.find(x=>x.id===el.dataset.photo);
-          if(m) openLightbox(m.photo);
-        };
-      });
+      bindPhotoClicks(list,id=>entry.memos.find(x=>x.id===id));
     }
   }
 
@@ -1021,7 +1023,7 @@
             <span><button class="edit" data-edit-daily="${m.id}">編集</button><button class="del" data-id="${m.id}">削除</button></span>
           </div>
           <div class="txt">${escapeHtml(m.text)}</div>
-          ${m.photo?`<div class="item-photo" data-photo="${m.id}"><img src="${m.photo}" alt=""></div>`:""}
+          ${photosHtml(m)}
         </div>
       `;
     }).join("");
@@ -1040,25 +1042,20 @@
         if(currentDay===todayStr()) renderTodayCard();
       });
     });
-    list.querySelectorAll(".item-photo").forEach(el=>{
-      el.onclick=()=>{
-        const m=entry.memos.find(x=>x.id===el.dataset.photo);
-        if(m) openLightbox(m.photo);
-      };
-    });
+    bindPhotoClicks(list,id=>entry.memos.find(x=>x.id===id));
     list.querySelectorAll("[data-edit-daily]").forEach(btn=>{
       btn.onclick=()=>{
         const m=entry.memos.find(x=>x.id===btn.dataset.editDaily);
         if(!m) return;
         editingDailyId=m.id;
-        editingDailyPhoto=m.photo||null;
+        photoDrafts.daily=[...getPhotos(m)];
         renderWriteSection();
       };
     });
     list.querySelectorAll("[data-cancel-daily]").forEach(btn=>{
       btn.onclick=()=>{
         editingDailyId=null;
-        editingDailyPhoto=null;
+        photoDrafts.daily=[];
         renderWriteSection();
       };
     });
@@ -1068,18 +1065,18 @@
         if(!m) return;
         const text=document.getElementById("editDailyText").value.trim();
         if(!text){ toast("内容を入力してください"); return; }
-        const prevText=m.text, prevPhoto=m.photo;
-        m.text=text; m.photo=editingDailyPhoto;
+        const prevText=m.text, prevPhoto=m.photo, prevPhotos=m.photos;
+        m.text=text; setPhotos(m,photoDrafts.daily);
         try{
           saveDaily();
         }catch(err){
-          m.text=prevText; m.photo=prevPhoto;
+          m.text=prevText; m.photo=prevPhoto; m.photos=prevPhotos;
           toast("保存に失敗しました(容量不足の可能性があります)");
           return;
         }
-        fbPut(`/daily/${currentDay}/memos/${m.id}`,tag({text:m.text,createdAt:m.createdAt,photo:m.photo||null}));
+        fbPut(`/daily/${currentDay}/memos/${m.id}`,tag({text:m.text,createdAt:m.createdAt,photos:m.photos||null,photo:null}));
         editingDailyId=null;
-        editingDailyPhoto=null;
+        photoDrafts.daily=[];
         renderWriteSection();
         renderCalendar();
         if(currentDay===todayStr()) renderTodayCard();
@@ -1125,38 +1122,13 @@
     renderCalendar();
   };
 
-  function renderDailyPhotoPreview(){
-    const box=document.getElementById("dailyPhotoPreview");
-    if(dailyPhotoData){
-      document.getElementById("dailyPhotoPreviewImg").src=dailyPhotoData;
-      box.style.display="";
-    }else{
-      box.style.display="none";
-    }
-  }
-  document.getElementById("dailyPhotoBtn").onclick=()=>document.getElementById("dailyPhotoInput").click();
-  document.getElementById("dailyPhotoInput").onchange=async(e)=>{
-    const file=e.target.files[0];
-    e.target.value="";
-    if(!file) return;
-    try{
-      dailyPhotoData=await readAndCompressImage(file);
-      renderDailyPhotoPreview();
-    }catch(err){
-      toast("写真の読み込みに失敗しました");
-    }
-  };
-  document.getElementById("dailyPhotoRemove").onclick=()=>{
-    dailyPhotoData=null;
-    renderDailyPhotoPreview();
-  };
-
   document.getElementById("dailyAdd").onclick=()=>{
     const ta=document.getElementById("dailyInput");
     const text=ta.value.trim();
     if(!text) return;
     const entry=dayEntry(currentDay);
-    const memo={id:uid(),text,createdAt:Date.now(),photo:dailyPhotoData||null};
+    const memo={id:uid(),text,createdAt:Date.now(),photo:null};
+    setPhotos(memo,photoDrafts.dailyNew);
     entry.memos.push(memo);
     try{
       saveDaily();
@@ -1165,10 +1137,10 @@
       toast("保存に失敗しました(容量不足の可能性があります)");
       return;
     }
-    fbPut(`/daily/${currentDay}/memos/${memo.id}`,tag({text:memo.text,createdAt:memo.createdAt,photo:memo.photo||null}));
+    fbPut(`/daily/${currentDay}/memos/${memo.id}`,tag({text:memo.text,createdAt:memo.createdAt,photos:memo.photos||null,photo:null}));
     ta.value="";
-    dailyPhotoData=null;
-    renderDailyPhotoPreview();
+    photoDrafts.dailyNew=[];
+    renderPhotoEditRow("dailyNewPhotoRow","dailyNew");
     renderWriteSection();
     renderCalendar();
     if(currentDay===todayStr()) renderTodayCard();
@@ -1211,7 +1183,7 @@
   function openGeneralDetail(id){
     openGeneralId=id;
     editingGeneral=false;
-    editingGeneralPhoto=null;
+    photoDrafts.general=[];
     document.getElementById("generalListView").style.display="none";
     document.getElementById("generalDetailView").style.display="";
     renderGeneralDetail();
@@ -1256,10 +1228,14 @@
     document.getElementById("genDetailSubject").textContent=g.subject||"(件名なし)";
     document.getElementById("genDetailContent").textContent=g.content;
     const photoBox=document.getElementById("genDetailPhoto");
-    if(g.photo){
-      photoBox.innerHTML=`<img src="${g.photo}" alt="">`;
+    const gPhotos=getPhotos(g);
+    if(gPhotos.length){
+      photoBox.innerHTML=gPhotos.map((src,i)=>`<img src="${src}" data-idx="${i}" alt="">`).join("");
       photoBox.style.display="";
-      photoBox.onclick=()=>openLightbox(g.photo);
+      photoBox.onclick=(e)=>{
+        const img=e.target.closest("img");
+        if(img) openLightbox(gPhotos[Number(img.dataset.idx)]);
+      };
     }else{
       photoBox.style.display="none";
       photoBox.innerHTML="";
@@ -1331,32 +1307,6 @@
     toast("コメントしました");
   };
 
-  function renderGenPhotoPreview(){
-    const box=document.getElementById("genPhotoPreview");
-    if(genPhotoData){
-      document.getElementById("genPhotoPreviewImg").src=genPhotoData;
-      box.style.display="";
-    }else{
-      box.style.display="none";
-    }
-  }
-  document.getElementById("genPhotoBtn").onclick=()=>document.getElementById("genPhotoInput").click();
-  document.getElementById("genPhotoInput").onchange=async(e)=>{
-    const file=e.target.files[0];
-    e.target.value="";
-    if(!file) return;
-    try{
-      genPhotoData=await readAndCompressImage(file);
-      renderGenPhotoPreview();
-    }catch(err){
-      toast("写真の読み込みに失敗しました");
-    }
-  };
-  document.getElementById("genPhotoRemove").onclick=()=>{
-    genPhotoData=null;
-    renderGenPhotoPreview();
-  };
-
   document.getElementById("genAdd").onclick=()=>{
     const authorEl=document.getElementById("genAuthor");
     const subjEl=document.getElementById("genSubject");
@@ -1365,7 +1315,8 @@
     const subject=subjEl.value.trim();
     const content=contEl.value.trim();
     if(!author||!content) return;
-    const item={id:uid(),author,subject,content,createdAt:Date.now(),seenBy:[],comments:[],photo:genPhotoData||null};
+    const item={id:uid(),author,subject,content,createdAt:Date.now(),seenBy:[],comments:[],photo:null};
+    setPhotos(item,photoDrafts.genNew);
     general.push(item);
     try{
       saveGeneral();
@@ -1380,8 +1331,8 @@
     }
     subjEl.value="";
     contEl.value="";
-    genPhotoData=null;
-    renderGenPhotoPreview();
+    photoDrafts.genNew=[];
+    renderPhotoEditRow("genNewPhotoRow","genNew");
     renderGeneralList();
     toast("作成しました");
   };
@@ -1390,12 +1341,12 @@
     const g=general.find(x=>x.id===openGeneralId);
     if(!g) return;
     editingGeneral=true;
-    editingGeneralPhoto=g.photo||null;
+    photoDrafts.general=[...getPhotos(g)];
     renderGeneralDetail();
   };
   document.getElementById("genEditCancel").onclick=()=>{
     editingGeneral=false;
-    editingGeneralPhoto=null;
+    photoDrafts.general=[];
     renderGeneralDetail();
   };
   document.getElementById("genEditSave").onclick=()=>{
@@ -1405,8 +1356,8 @@
     const subject=document.getElementById("genEditSubject").value.trim();
     const content=document.getElementById("genEditContent").value.trim();
     if(!author||!content){ toast("作成者と内容を入力してください"); return; }
-    const prev={author:g.author,subject:g.subject,content:g.content,photo:g.photo};
-    g.author=author; g.subject=subject; g.content=content; g.photo=editingGeneralPhoto;
+    const prev={author:g.author,subject:g.subject,content:g.content,photo:g.photo,photos:g.photos};
+    g.author=author; g.subject=subject; g.content=content; setPhotos(g,photoDrafts.general);
     try{
       saveGeneral();
     }catch(err){
@@ -1414,9 +1365,9 @@
       toast("保存に失敗しました(容量不足の可能性があります)");
       return;
     }
-    fbPatch(`/general/${g.id}`,{author:g.author,subject:g.subject,content:g.content,photo:g.photo||null});
+    fbPatch(`/general/${g.id}`,{author:g.author,subject:g.subject,content:g.content,photos:g.photos||null,photo:null});
     editingGeneral=false;
-    editingGeneralPhoto=null;
+    photoDrafts.general=[];
     renderGeneralDetail();
     renderGeneralList();
     toast("更新しました");
@@ -1508,7 +1459,7 @@
         <div class="body">
           <div class="to">${escapeHtml(p.from)||"(不明)"} → ${escapeHtml(p.to)}</div>
           <div class="txt">${escapeHtml(p.text)}</div>
-          ${p.photo?`<div class="item-photo" data-photo="${p.id}"><img src="${p.photo}" alt=""></div>`:""}
+          ${photosHtml(p)}
           <div class="meta"><span>${fmtDateTime(p.createdAt)}</span>
             <span><button class="edit" data-edit-personal="${p.id}">編集</button><button class="del" data-id="${p.id}">削除</button></span>
           </div>
@@ -1551,12 +1502,7 @@
         renderPersonal();
       };
     });
-    list.querySelectorAll(".item-photo").forEach(el=>{
-      el.onclick=()=>{
-        const item=personal.find(p=>p.id===el.dataset.photo);
-        if(item) openLightbox(item.photo);
-      };
-    });
+    bindPhotoClicks(list,id=>personal.find(p=>p.id===id));
     list.querySelectorAll(".del").forEach(btn=>{
       btn.onclick=()=>confirmDelete(btn,()=>{
         const id=btn.dataset.id;
@@ -1572,14 +1518,14 @@
         const item=personal.find(p=>p.id===btn.dataset.editPersonal);
         if(!item) return;
         editingPersonalId=item.id;
-        editingPersonalPhoto=item.photo||null;
+        photoDrafts.personal=[...getPhotos(item)];
         renderPersonal();
       };
     });
     list.querySelectorAll("[data-cancel-personal]").forEach(btn=>{
       btn.onclick=()=>{
         editingPersonalId=null;
-        editingPersonalPhoto=null;
+        photoDrafts.personal=[];
         renderPersonal();
       };
     });
@@ -1591,8 +1537,8 @@
         const to=document.getElementById("editPersonalTo").value;
         const text=document.getElementById("editPersonalText").value.trim();
         if(!from||!to||!text){ toast("差出人・宛先・内容を入力してください"); return; }
-        const prev={from:item.from,to:item.to,text:item.text,photo:item.photo};
-        item.from=from; item.to=to; item.text=text; item.photo=editingPersonalPhoto;
+        const prev={from:item.from,to:item.to,text:item.text,photo:item.photo,photos:item.photos};
+        item.from=from; item.to=to; item.text=text; setPhotos(item,photoDrafts.personal);
         try{
           savePersonal();
         }catch(err){
@@ -1600,9 +1546,9 @@
           toast("保存に失敗しました(容量不足の可能性があります)");
           return;
         }
-        fbPatch(`/personal/${item.id}`,{from:item.from,to:item.to,text:item.text,photo:item.photo||null});
+        fbPatch(`/personal/${item.id}`,{from:item.from,to:item.to,text:item.text,photos:item.photos||null,photo:null});
         editingPersonalId=null;
-        editingPersonalPhoto=null;
+        photoDrafts.personal=[];
         renderPersonal();
         toast("更新しました");
       };
@@ -1635,34 +1581,8 @@
 
   document.getElementById("perFilter").onchange=()=>{
     editingPersonalId=null;
-    editingPersonalPhoto=null;
+    photoDrafts.personal=[];
     renderPersonal();
-  };
-
-  function renderPerPhotoPreview(){
-    const box=document.getElementById("perPhotoPreview");
-    if(perPhotoData){
-      document.getElementById("perPhotoPreviewImg").src=perPhotoData;
-      box.style.display="";
-    }else{
-      box.style.display="none";
-    }
-  }
-  document.getElementById("perPhotoBtn").onclick=()=>document.getElementById("perPhotoInput").click();
-  document.getElementById("perPhotoInput").onchange=async(e)=>{
-    const file=e.target.files[0];
-    e.target.value="";
-    if(!file) return;
-    try{
-      perPhotoData=await readAndCompressImage(file);
-      renderPerPhotoPreview();
-    }catch(err){
-      toast("写真の読み込みに失敗しました");
-    }
-  };
-  document.getElementById("perPhotoRemove").onclick=()=>{
-    perPhotoData=null;
-    renderPerPhotoPreview();
   };
 
   document.getElementById("perAdd").onclick=()=>{
@@ -1673,7 +1593,8 @@
     const to=toSel.value;
     const text=textEl.value.trim();
     if(!from||!to||!text) return;
-    const item={id:uid(),from,to,text,createdAt:Date.now(),read:false,readAt:null,photo:perPhotoData||null,comments:[]};
+    const item={id:uid(),from,to,text,createdAt:Date.now(),read:false,readAt:null,photo:null,comments:[]};
+    setPhotos(item,photoDrafts.perNew);
     personal.push(item);
     try{
       savePersonal();
@@ -1687,8 +1608,8 @@
       fbPut(`/personal/${id}`,tag(rest));
     }
     textEl.value="";
-    perPhotoData=null;
-    renderPerPhotoPreview();
+    photoDrafts.perNew=[];
+    renderPhotoEditRow("perNewPhotoRow","perNew");
     renderPersonal();
     toast("送りました");
   };
@@ -1829,6 +1750,9 @@
 
   // ---------- init ----------
   document.getElementById("versionLabel").textContent=APP_VERSION;
+  renderPhotoEditRow("dailyNewPhotoRow","dailyNew");
+  renderPhotoEditRow("genNewPhotoRow","genNew");
+  renderPhotoEditRow("perNewPhotoRow","perNew");
   switchView("daily");
   startSync();
 })();
