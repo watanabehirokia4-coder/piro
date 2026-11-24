@@ -301,7 +301,7 @@
       <div class="card">
         <h2>新しい話題</h2>
         <select id="topicAuthor" style="margin-bottom:8px;"></select>
-        <input type="text" id="topicTitle" placeholder="話題(例: 朝と夜で在庫の置き方が違う)" style="margin-bottom:8px;">
+        <input type="text" id="topicTitle" placeholder="話題(例: 綺麗な日付スタンプの押し方)" style="margin-bottom:8px;">
         <textarea id="topicText" placeholder="最初のメッセージ(困っていること・提案など)"></textarea>
         <div class="photo-field" id="topicNewPhotoRow"></div>
         <button class="btn block" id="topicCreate" style="margin-top:10px;">話題を作る</button>
@@ -405,7 +405,7 @@
   const CHATTOPIC_KEY="tsutae_chattopics_v1";
   const WEEKDAYS=["日","月","火","水","木","金","土"];
   const FIREBASE_BASE="https://kagurazyu-dentatsu-default-rtdb.asia-southeast1.firebasedatabase.app";
-  const APP_VERSION="20261124a";
+  const APP_VERSION="20261124b";
 
   const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,6);
   const p2=n=>String(n).padStart(2,"0");
