@@ -187,6 +187,13 @@
   .chat-meta button{background:none; border:none; color:var(--sub); font-size:11px; cursor:pointer; padding:2px 3px;}
   .chat-meta button.edit{color:var(--accent);}
   .chat-meta button.confirm-armed{background:var(--red); color:#fff; border-radius:6px; padding:2px 7px;}
+  .chat-reacts{display:flex; flex-wrap:wrap; gap:5px; margin:4px 2px 0;}
+  .chat-msg.own .chat-reacts{justify-content:flex-end;}
+  .react-pill{background:var(--card); border:1px solid var(--line); border-radius:12px; padding:2px 9px; font-size:12px; cursor:pointer; color:var(--text);}
+  .react-pill.mine{background:#fde8e5; border-color:var(--accent);}
+  .react-picker{display:flex; gap:2px; background:var(--card); border:1px solid var(--line); border-radius:20px; padding:3px 8px; margin-top:4px; box-shadow:var(--shadow);}
+  .react-picker button{background:none; border:none; font-size:22px; cursor:pointer; padding:2px 5px; border-radius:10px;}
+  .react-picker button.mine{background:#fde8e5;}
   .chat-date{text-align:center; font-size:11px; color:var(--sub); margin:14px 0 10px;}
   .chat-date span{background:var(--card3); padding:3px 10px; border-radius:10px;}
   .chat-replybar{display:flex; align-items:center; gap:8px; background:var(--card2); border-left:3px solid var(--accent); border-radius:6px; padding:6px 10px; font-size:12px; color:var(--sub); margin-bottom:8px;}
@@ -405,7 +412,7 @@
   const CHATTOPIC_KEY="tsutae_chattopics_v1";
   const WEEKDAYS=["日","月","火","水","木","金","土"];
   const FIREBASE_BASE="https://kagurazyu-dentatsu-default-rtdb.asia-southeast1.firebasedatabase.app";
-  const APP_VERSION="20261124b";
+  const APP_VERSION="20261124c";
 
   const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,6);
   const p2=n=>String(n).padStart(2,"0");
@@ -845,7 +852,15 @@
     }
   }
 
-  function handleFirebaseEvent(evt){
+  function handleFirebaseEvent(evt,isPatch){
+    // Firebaseのpatchイベントは「そのパス以下の、変更されたキーだけ」を運んでくる。
+    // 項目全体の置き換えとして扱うと、他の項目(本文や作成日時など)が欠けてしまうため、
+    // キーごとの個別の書き込み(put)に分解して処理する。
+    if(isPatch && evt.data && typeof evt.data==="object" && !Array.isArray(evt.data)){
+      const base=String(evt.path||"/").replace(/\/+$/,"");
+      Object.entries(evt.data).forEach(([k,v])=>handleFirebaseEvent({path:base+"/"+k,data:v}));
+      return;
+    }
     const path=evt.path;
     const data=evt.data;
     const parts=path.replace(/^\//,"").split("/").filter(Boolean);
@@ -907,6 +922,25 @@
         saveJSON(LIST_STORAGE[key], arr.map(stripPhoto));
       }
     }
+    else if((key==="general"||key==="personal"||key==="chat"||key==="chatTopics") && parts.length>=4){
+      const item=getList(key).find(x=>x.id===parts[1]);
+      if(item){
+        const sub=parts.slice(2);
+        let cur=item, ok=true;
+        for(let i=0;i<sub.length-1;i++){
+          if(cur[sub[i]]===undefined||cur[sub[i]]===null||typeof cur[sub[i]]!=="object"){
+            if(data===null){ ok=false; break; }
+            cur[sub[i]]={};
+          }
+          cur=cur[sub[i]];
+        }
+        if(ok){
+          const last=sub[sub.length-1];
+          if(data===null) delete cur[last]; else cur[last]=data;
+          saveJSON(LIST_STORAGE[key], getList(key).map(stripPhoto));
+        }
+      }
+    }
     else if(key==="daily" && parts.length===2){
       const date=parts[1];
       if(data===null){ delete daily[date]; }
@@ -951,7 +985,7 @@
       const es=new EventSource(`${FIREBASE_BASE}/.json`);
       activeES=es;
       es.addEventListener("put",e=>{ try{ handleFirebaseEvent(JSON.parse(e.data)); }catch(err){} });
-      es.addEventListener("patch",e=>{ try{ handleFirebaseEvent(JSON.parse(e.data)); }catch(err){} });
+      es.addEventListener("patch",e=>{ try{ handleFirebaseEvent(JSON.parse(e.data),true); }catch(err){} });
     }catch(err){}
   }
 
@@ -1720,7 +1754,37 @@
   if(!chatBaseline){ chatBaseline=Date.now(); try{ localStorage.setItem(CHAT_BASE_KEY,String(chatBaseline)); }catch(err){} }
   let chatRead=loadJSON(CHAT_READ_KEY,{});
   let openTopicId=null, editingChatId=null, chatReplyTo=null, chatShowAll=false;
-  let showClosedTopics=false, editingTopicTitle=false;
+  let showClosedTopics=false, editingTopicTitle=false, reactPickerId=null;
+  // LINE風のリアクション。1人が1つの発言に付けられるのは1種類(別のを押すと付け替え、同じのを押すと外れる)。
+  // キーは英数字(Firebaseのキーに日本語を避けるため)。値はその反応をした人の名前の配列。
+  const REACTIONS=[{key:"thumb",e:"👍"},{key:"heart",e:"❤️"},{key:"laugh",e:"😆"},{key:"wow",e:"😮"},{key:"sad",e:"😢"},{key:"pray",e:"🙏"}];
+  function reactionsOf(m){
+    const out={};
+    const r=m&&m.reactions;
+    if(!r||typeof r!=="object") return out;
+    REACTIONS.forEach(({key})=>{
+      let v=r[key];
+      if(v&&!Array.isArray(v)&&typeof v==="object") v=Object.values(v);
+      if(Array.isArray(v)){ v=v.filter(n=>typeof n==="string"&&n); if(v.length) out[key]=v; }
+    });
+    return out;
+  }
+  function setReaction(m,key){
+    const me=chatAuthorName();
+    if(!me){ toast("名前を選んでください"); return; }
+    const cur=reactionsOf(m);
+    const mineKey=Object.keys(cur).find(k=>cur[k].includes(me));
+    const next={};
+    Object.keys(cur).forEach(k=>{ next[k]=cur[k].filter(n=>n!==me); });
+    if(mineKey!==key){ next[key]=[...(next[key]||[]),me]; }
+    const changed=new Set([key]); if(mineKey) changed.add(mineKey);
+    const clean={};
+    Object.keys(next).forEach(k=>{ if(next[k].length) clean[k]=next[k]; });
+    const prev=m.reactions;
+    m.reactions=Object.keys(clean).length?clean:null;
+    try{ saveChat(); }catch(err){ m.reactions=prev; toast("保存に失敗しました(容量不足の可能性があります)"); return; }
+    changed.forEach(k=>{ fbPut(`/chat/${m.id}/reactions/${k}`,clean[k]||null); });
+  }
 
   function jstDate(ts){ const d=new Date(ts); return new Date(d.getTime()+d.getTimezoneOffset()*60000+9*3600000); }
   function fmtTimeOnly(ts){ const j=jstDate(ts); return p2(j.getHours())+":"+p2(j.getMinutes()); }
@@ -1808,12 +1872,26 @@
 
   function openTopic(id){
     openTopicId=id;
-    editingChatId=null; editingTopicTitle=false; chatReplyTo=null; chatShowAll=false;
+    editingChatId=null; editingTopicTitle=false; chatReplyTo=null; chatShowAll=false; reactPickerId=null;
     photoDrafts.chatNew=[];
     renderTopicDetail(false);
     scrollToBottom();
   }
 
+  function reactionsHtml(m,me){
+    const rx=reactionsOf(m);
+    let html="";
+    const pills=REACTIONS.filter(r=>rx[r.key]).map(r=>{
+      const names=rx[r.key];
+      return `<button class="react-pill ${me&&names.includes(me)?"mine":""}" data-react-msg="${m.id}" data-react-key="${r.key}">${r.e} ${names.map(escapeHtml).join("・")}</button>`;
+    }).join("");
+    if(pills) html+=`<div class="chat-reacts">${pills}</div>`;
+    if(reactPickerId===m.id){
+      const mine=Object.keys(rx).find(k=>me&&rx[k].includes(me));
+      html+=`<div class="react-picker">${REACTIONS.map(r=>`<button class="${mine===r.key?"mine":""}" data-react-msg="${m.id}" data-react-key="${r.key}">${r.e}</button>`).join("")}</div>`;
+    }
+    return html;
+  }
   function chatMessagesHtml(msgs,me){
     let html="", lastDay="";
     msgs.forEach(m=>{
@@ -1828,7 +1906,8 @@
       html+=`<div class="chat-msg ${own?"own":""}">`
         +`<div class="chat-name">${escapeHtml(m.author||"(不明)")}</div>`
         +`<div class="chat-bubble">${q}${m.text?`<div class="chat-text">${escapeHtml(m.text)}</div>`:""}${photosHtml(m)}</div>`
-        +`<div class="chat-meta"><span>${fmtTimeOnly(m.createdAt)}${m.editedAt?" (編集済)":""}</span><button data-reply-chat="${m.id}">返信</button>`
+        +reactionsHtml(m,me)
+        +`<div class="chat-meta"><span>${fmtTimeOnly(m.createdAt)}${m.editedAt?" (編集済)":""}</span><button data-react-open="${m.id}">😊</button><button data-reply-chat="${m.id}">返信</button>`
         +(own?`<button class="edit" data-edit-chat="${m.id}">編集</button><button data-del-chat="${m.id}">削除</button>`:"")
         +`</div></div>`;
     });
@@ -1882,7 +1961,7 @@
   }
 
   document.getElementById("chatBack").onclick=()=>{
-    openTopicId=null; editingChatId=null; editingTopicTitle=false; chatReplyTo=null;
+    openTopicId=null; editingChatId=null; editingTopicTitle=false; chatReplyTo=null; reactPickerId=null;
     renderTopicList(); updateChatBadge();
     window.scrollTo(0,0);
   };
@@ -1897,6 +1976,20 @@
       const box=img.closest(".item-photos");
       const m=chat.find(x=>x.id===box.dataset.photoOwner);
       if(m) openLightbox(getPhotos(m)[Number(img.dataset.idx)]);
+      return;
+    }
+    const reactOpen=e.target.closest("[data-react-open]");
+    if(reactOpen){
+      reactPickerId=(reactPickerId===reactOpen.dataset.reactOpen)?null:reactOpen.dataset.reactOpen;
+      renderTopicDetail(false);
+      return;
+    }
+    const reactBtn=e.target.closest("[data-react-msg]");
+    if(reactBtn){
+      const m=chat.find(x=>x.id===reactBtn.dataset.reactMsg);
+      reactPickerId=null;
+      if(m) setReaction(m,reactBtn.dataset.reactKey);
+      renderTopicDetail(false);
       return;
     }
     const replyBtn=e.target.closest("[data-reply-chat]");
@@ -2157,6 +2250,14 @@
       if(m.author===oldName){ m.author=newName; patch.author=newName; }
       if(m.replyTo && m.replyTo.author===oldName){ m.replyTo=Object.assign({},m.replyTo,{author:newName}); patch.replyTo=m.replyTo; }
       if(Object.keys(patch).length) fbPatch(`/chat/${m.id}`,patch);
+      const rx=reactionsOf(m);
+      const rxKeys=Object.keys(rx).filter(k=>rx[k].includes(oldName));
+      if(rxKeys.length){
+        const next={};
+        Object.keys(rx).forEach(k=>{ next[k]=rx[k].map(n=>n===oldName?newName:n); });
+        m.reactions=next;
+        rxKeys.forEach(k=>fbPut(`/chat/${m.id}/reactions/${k}`,next[k]));
+      }
     });
     saveChat();
     if(localStorage.getItem(CHAT_AUTHOR_KEY)===oldName) localStorage.setItem(CHAT_AUTHOR_KEY,newName);
