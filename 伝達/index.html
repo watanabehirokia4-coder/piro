@@ -162,8 +162,35 @@
 
   nav.tabs{position:fixed; bottom:0; left:0; right:0; z-index:30; background:rgba(255,255,255,.92); backdrop-filter:blur(12px); border-top:1px solid var(--line); display:flex; padding-bottom:env(safe-area-inset-bottom,0);}
   nav.tabs button{flex:1; background:none; border:none; color:var(--sub); padding:10px 0 11px; cursor:pointer; font-size:11px; font-family:inherit; display:flex; flex-direction:column; align-items:center; gap:3px;}
+  nav.tabs button{position:relative;}
   nav.tabs button .ico{font-size:20px;}
+  nav.tabs button .badge{position:absolute; top:4px; left:calc(50% + 8px); background:var(--red); color:#fff; font-size:10px; font-weight:700; min-width:16px; height:16px; line-height:16px; border-radius:8px; padding:0 4px; text-align:center;}
   nav.tabs button.active{color:var(--accent);}
+
+  .topic-row{background:var(--card2); border:1px solid var(--line); border-radius:11px; padding:12px 13px; margin-bottom:9px; cursor:pointer;}
+  .topic-row:active{background:var(--card3);}
+  .topic-row .t-title{font-size:15px; font-weight:700; margin-bottom:4px; display:flex; align-items:center; gap:8px;}
+  .topic-row .t-title .t-name{flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .topic-row .t-last{font-size:13px; color:var(--sub); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; margin-bottom:4px;}
+  .topic-row .t-meta{font-size:11px; color:var(--sub); display:flex; justify-content:space-between; gap:8px;}
+  .unread-badge{background:var(--red); color:#fff; font-size:11px; font-weight:700; min-width:20px; height:20px; line-height:20px; border-radius:10px; padding:0 6px; text-align:center; flex-shrink:0;}
+  .closed-badge{font-size:11px; padding:2px 8px; border-radius:10px; background:var(--card3); color:var(--green); flex-shrink:0;}
+  .chat-msg{display:flex; flex-direction:column; align-items:flex-start; margin-bottom:12px;}
+  .chat-msg.own{align-items:flex-end;}
+  .chat-msg.editing{align-items:stretch;}
+  .chat-name{font-size:11px; color:var(--sub); margin:0 4px 3px;}
+  .chat-bubble{background:var(--card2); border:1px solid var(--line); border-radius:14px; padding:9px 12px; max-width:86%; word-break:break-word; font-size:14.5px; line-height:1.55;}
+  .chat-msg.own .chat-bubble{background:#fde8e5; border-color:#f6c9c4;}
+  .chat-text{white-space:pre-wrap;}
+  .chat-quote{font-size:12px; color:var(--sub); border-left:3px solid var(--line); padding:2px 8px; margin-bottom:6px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .chat-meta{font-size:11px; color:var(--sub); margin:3px 4px 0; display:flex; gap:8px; align-items:center;}
+  .chat-meta button{background:none; border:none; color:var(--sub); font-size:11px; cursor:pointer; padding:2px 3px;}
+  .chat-meta button.edit{color:var(--accent);}
+  .chat-meta button.confirm-armed{background:var(--red); color:#fff; border-radius:6px; padding:2px 7px;}
+  .chat-date{text-align:center; font-size:11px; color:var(--sub); margin:14px 0 10px;}
+  .chat-date span{background:var(--card3); padding:3px 10px; border-radius:10px;}
+  .chat-replybar{display:flex; align-items:center; gap:8px; background:var(--card2); border-left:3px solid var(--accent); border-radius:6px; padding:6px 10px; font-size:12px; color:var(--sub); margin-bottom:8px;}
+  .chat-replybar .r-text{flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
 
   .toast{position:fixed; left:50%; bottom:100px; transform:translateX(-50%) translateY(20px); background:#2b2a27; color:#fff; padding:11px 18px; border-radius:11px; font-size:13.5px; box-shadow:var(--shadow); opacity:0; pointer-events:none; transition:.25s; z-index:50;}
   .toast.show{opacity:1; transform:translateX(-50%) translateY(0);}
@@ -268,6 +295,48 @@
     </div>
   </section>
 
+  <!-- チャット(話題ごと) -->
+  <section class="view" id="view-chat">
+    <div id="chatListView">
+      <div class="card">
+        <h2>新しい話題</h2>
+        <select id="topicAuthor" style="margin-bottom:8px;"></select>
+        <input type="text" id="topicTitle" placeholder="話題(例: 朝と夜で在庫の置き方が違う)" style="margin-bottom:8px;">
+        <textarea id="topicText" placeholder="最初のメッセージ(困っていること・提案など)"></textarea>
+        <div class="photo-field" id="topicNewPhotoRow"></div>
+        <button class="btn block" id="topicCreate" style="margin-top:10px;">話題を作る</button>
+      </div>
+      <div class="card">
+        <h2>話題一覧</h2>
+        <div class="chips" style="margin-bottom:12px;">
+          <div class="chip active" id="topicTabOpen">話し合い中</div>
+          <div class="chip" id="topicTabClosed">解決済み</div>
+        </div>
+        <div id="topicList"></div>
+      </div>
+    </div>
+
+    <div id="chatDetailView" style="display:none;">
+      <div class="backbar">
+        <button class="btn ghost sm" id="chatBack">◀ 話題一覧へ</button>
+        <button class="btn ghost sm" id="topicToggle" style="margin-left:auto;"></button>
+        <button class="btn danger sm" id="topicDelete">削除</button>
+      </div>
+      <div class="card">
+        <div id="topicHead"></div>
+        <div id="chatList"></div>
+        <div id="chatShowMore" style="display:none; text-align:center; margin-bottom:10px;"><button class="btn ghost sm" id="chatShowMoreBtn">以前のメッセージを表示</button></div>
+      </div>
+      <div class="card">
+        <div id="chatReplyBar" class="chat-replybar" style="display:none;"></div>
+        <select id="chatAuthor" style="margin-bottom:8px;"></select>
+        <textarea id="chatInput" placeholder="メッセージ" style="min-height:60px;"></textarea>
+        <div class="photo-field" id="chatNewPhotoRow"></div>
+        <button class="btn block" id="chatSend" style="margin-top:10px;">送信</button>
+      </div>
+    </div>
+  </section>
+
   <!-- 個人伝達 -->
   <section class="view" id="view-personal">
     <div class="card">
@@ -317,6 +386,7 @@
   <button class="active" data-view="daily"><span class="ico">📅</span>今日の伝達</button>
   <button data-view="general"><span class="ico">📢</span>全体伝達</button>
   <button data-view="personal"><span class="ico">👤</span>個人伝達</button>
+  <button data-view="chat"><span class="ico">💬</span>チャット<span class="badge" id="chatBadge" style="display:none;"></span></button>
   <button data-view="staff"><span class="ico">⚙️</span>管理</button>
 </nav>
 
@@ -331,9 +401,11 @@
   const DAILY_KEY="tsutae_daily_v1";
   const GENERAL_KEY="tsutae_general_v1";
   const PERSONAL_KEY="tsutae_personal_v1";
+  const CHAT_KEY="tsutae_chat_v1";
+  const CHATTOPIC_KEY="tsutae_chattopics_v1";
   const WEEKDAYS=["日","月","火","水","木","金","土"];
   const FIREBASE_BASE="https://kagurazyu-dentatsu-default-rtdb.asia-southeast1.firebasedatabase.app";
-  const APP_VERSION="20261015a";
+  const APP_VERSION="20261124a";
 
   const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,6);
   const p2=n=>String(n).padStart(2,"0");
@@ -352,14 +424,16 @@
   general.forEach(g=>{ if(!Array.isArray(g.seenBy)) g.seenBy=[]; if(!Array.isArray(g.comments)) g.comments=[]; });
   let personal=loadJSON(PERSONAL_KEY,[]);
   personal.forEach(p=>{ if(!Array.isArray(p.comments)) p.comments=[]; });
+  let chat=loadJSON(CHAT_KEY,[]);
+  let chatTopics=loadJSON(CHATTOPIC_KEY,[]);
 
   // ---------- 削除履歴(墓標) ----------
   // Firebase側の一覧取得が、削除した項目を古い状態のまま返し続けることがあるため、
   // 一度この端末で削除した項目は、以後クラウド側が何と言ってきても
   // 二度と復活させない(明示的にもう一度追加された時だけ解除する)。
   const TOMBSTONE_KEY="tsutae_tombstones_v1";
-  let tombstones=loadJSON(TOMBSTONE_KEY,{staff:[],general:[],personal:[],dailyMemos:[]});
-  ["staff","general","personal","dailyMemos"].forEach(t=>{ if(!Array.isArray(tombstones[t])) tombstones[t]=[]; });
+  let tombstones=loadJSON(TOMBSTONE_KEY,{staff:[],general:[],personal:[],dailyMemos:[],chat:[],chatTopics:[]});
+  ["staff","general","personal","dailyMemos","chat","chatTopics"].forEach(t=>{ if(!Array.isArray(tombstones[t])) tombstones[t]=[]; });
   function saveTombstones(){ saveJSON(TOMBSTONE_KEY,tombstones); }
   function addTombstone(type,key){ if(!tombstones[type].includes(key)){ tombstones[type].push(key); saveTombstones(); } }
   function removeTombstone(type,key){ if(tombstones[type].includes(key)){ tombstones[type]=tombstones[type].filter(k=>k!==key); saveTombstones(); } }
@@ -371,7 +445,10 @@
   let openGeneralId=null;
   const MAX_PHOTOS=10;
   // 作成フォーム・編集フォームで選択中の写真(複数枚)。key = 用途
-  const photoDrafts={daily:[], general:[], personal:[], dailyNew:[], genNew:[], perNew:[]};
+  const photoDrafts={daily:[], general:[], personal:[], dailyNew:[], genNew:[], perNew:[], chatNew:[], topicNew:[]};
+  // チャットはメッセージ数が増えるので、写真は少なめ・小さめにする
+  const CHAT_CONTEXTS=["chatNew","topicNew"];
+  const photoLimit=ctx=>CHAT_CONTEXTS.includes(ctx)?4:MAX_PHOTOS;
   // 旧形式(photo=1枚)と新形式(photos=配列)の両方から写真の配列を取り出す
   function getPhotos(item){
     if(!item) return [];
@@ -399,13 +476,13 @@
     });
   }
 
-  function readAndCompressImage(file){
+  function readAndCompressImage(file,maxDim){
     return new Promise((resolve,reject)=>{
       const reader=new FileReader();
       reader.onload=()=>{
         const img=new Image();
         img.onload=()=>{
-          const maxDim=1000;
+          maxDim=maxDim||1000;
           let w=img.width,h=img.height;
           if(w>maxDim||h>maxDim){
             if(w>h){h=Math.round(h*maxDim/w);w=maxDim;}
@@ -446,8 +523,9 @@
     const thumbs=photos.length
       ? `<div class="photo-thumbs">${photos.map((src,i)=>`<div class="photo-preview"><img src="${src}" alt=""><button type="button" class="photo-remove" data-photo-remove="${i}">×</button></div>`).join("")}</div>`
       : "";
-    const full=photos.length>=MAX_PHOTOS;
-    box.innerHTML = thumbs + (full ? `<div style="font-size:12px; color:var(--sub); margin-top:8px;">写真は${MAX_PHOTOS}枚までです</div>`
+    const limit=photoLimit(context);
+    const full=photos.length>=limit;
+    box.innerHTML = thumbs + (full ? `<div style="font-size:12px; color:var(--sub); margin-top:8px;">写真は${limit}枚までです</div>`
       : `<button type="button" class="btn ghost sm" data-photo-change="1" style="margin-top:${photos.length?8:0}px;">${photos.length?"📷 さらに追加":"📷 写真を追加"}</button>`);
     box.querySelectorAll("[data-photo-remove]").forEach(btn=>{
       btn.onclick=()=>{ photoDrafts[context].splice(Number(btn.dataset.photoRemove),1); renderPhotoEditRow(containerId,context); };
@@ -466,16 +544,16 @@
     if(!files.length||!context) return;
     let failed=false, over=false;
     for(const file of files){
-      if(photoDrafts[context].length>=MAX_PHOTOS){ over=true; break; }
+      if(photoDrafts[context].length>=photoLimit(context)){ over=true; break; }
       try{
-        photoDrafts[context].push(await readAndCompressImage(file));
+        photoDrafts[context].push(await readAndCompressImage(file,CHAT_CONTEXTS.includes(context)?800:1000));
       }catch(err){
         failed=true;
       }
     }
     renderPhotoEditRow(containerId,context);
     if(failed) toast("読み込めない写真がありました");
-    else if(over) toast(`写真は${MAX_PHOTOS}枚までです`);
+    else if(over) toast(`写真は${photoLimit(context)}枚までです`);
   };
 
   // 端末のローカル保存(localStorage)は容量が限られているため、写真データは
@@ -498,6 +576,15 @@
   function saveDaily(){saveJSON(DAILY_KEY,stripDailyPhotos(daily));}
   function saveGeneral(){saveJSON(GENERAL_KEY,general.map(stripPhoto));}
   function savePersonal(){saveJSON(PERSONAL_KEY,personal.map(stripPhoto));}
+  function saveChat(){saveJSON(CHAT_KEY,chat.map(stripPhoto));}
+  function saveChatTopics(){saveJSON(CHATTOPIC_KEY,chatTopics);}
+  // 同期対象の「id付き一覧」データへの共通アクセサ
+  const LIST_STORAGE={general:GENERAL_KEY,personal:PERSONAL_KEY,chat:CHAT_KEY,chatTopics:CHATTOPIC_KEY};
+  function getList(key){ return key==="general"?general:key==="personal"?personal:key==="chat"?chat:chatTopics; }
+  function setList(key,arr){
+    if(key==="general") general=arr; else if(key==="personal") personal=arr; else if(key==="chat") chat=arr; else chatTopics=arr;
+    saveJSON(LIST_STORAGE[key],arr.map(stripPhoto));
+  }
 
   // ---------- クラウド同期(Firebase Realtime Database) ----------
   // 全体を丸ごと書き込むと複数端末が同時に保存した時に片方の変更が消えるため、
@@ -505,7 +592,7 @@
   function fbKey(s){ return encodeURIComponent(String(s)).replace(/\./g,"%2E"); }
   // 直近でローカルから書き込んだキーは、再接続直後の古いスナップショットで
   // 上書きされないよう一定時間(猶予)は全体置き換えを無視する。
-  let lastLocalWrite={staff:0,daily:0,general:0,personal:0};
+  let lastLocalWrite={staff:0,daily:0,general:0,personal:0,chat:0,chatTopics:0};
   const LOCAL_WRITE_GRACE_MS=8000;
   function fbTouch(path){
     const key=path.replace(/^\//,"").split("/")[0];
@@ -663,6 +750,7 @@
     if(key==="daily"){ daily=value||{}; saveJSON(DAILY_KEY,stripDailyPhotos(daily)); }
     if(key==="general"){ general=value||[]; general.forEach(g=>{ if(!Array.isArray(g.seenBy)) g.seenBy=[]; if(!Array.isArray(g.comments)) g.comments=[]; }); saveJSON(GENERAL_KEY,general.map(stripPhoto)); }
     if(key==="personal"){ personal=value||[]; personal.forEach(p=>{ if(!Array.isArray(p.comments)) p.comments=[]; }); saveJSON(PERSONAL_KEY,personal.map(stripPhoto)); }
+    if(key==="chat"||key==="chatTopics") setList(key,value||[]);
   }
 
   function currentView(){
@@ -679,6 +767,12 @@
         else renderGeneralList();
       }
       else if(v==="personal"&&!editingPersonalId) renderPersonal();
+      else if(v==="chat"&&!editingChatId&&!editingTopicTitle) renderChatView(true);
+      return;
+    }
+    if(key==="chat"||key==="chatTopics"){
+      updateChatBadge();
+      if(v==="chat"&&!editingChatId&&!editingTopicTitle) renderChatView(true);
       return;
     }
     if(key==="daily"&&v==="daily"&&!editingDailyId) renderDaily();
@@ -689,8 +783,8 @@
     if(key==="personal"&&v==="personal"&&!editingPersonalId) renderPersonal();
   }
 
-  const SYNC_KEYS=["staff","daily","general","personal"];
-  let firstSyncDone={staff:false,daily:false,general:false,personal:false};
+  const SYNC_KEYS=["staff","daily","general","personal","chat","chatTopics"];
+  let firstSyncDone={staff:false,daily:false,general:false,personal:false,chat:false,chatTopics:false};
   let everConnected=false;
   // この端末で一度でも同期が完了したことがあるか(ページ再読み込みをまたいで記憶する)。
   // これが無いと、更新ボタンを押すたびに「初回同期」扱いになり、端末側の古いデータと
@@ -704,7 +798,7 @@
       let merged;
       if(key==="staff") merged=mergeStaffLists(staff,remoteValue);
       else if(key==="daily") merged=mergeDailyMaps(daily,remoteValue);
-      else merged=mergeById(key==="general"?general:personal,remoteValue,key);
+      else merged=mergeById(getList(key),remoteValue,key);
       applyLocalData(key,merged);
       if(key==="staff") fbPut("/staff",staffArrayToRemoteMap(merged));
       else if(key==="daily") fbPut("/daily",localDailyToRemote(merged));
@@ -788,30 +882,29 @@
       else if((!vMigrated||isTaggedValue(data)) && !isTombstoned("staff",name) && !staff.includes(name)){ staff.push(name); }
       saveJSON(STAFF_KEY,staff);
     }
-    else if((key==="general"||key==="personal") && parts.length===2){
+    else if((key==="general"||key==="personal"||key==="chat"||key==="chatTopics") && parts.length===2){
       const id=parts[1];
-      let arr=key==="general"?general:personal;
+      let arr=getList(key);
       if(data===null){
         arr=arr.filter(x=>x.id!==id);
       }else if((!vMigrated||isTaggedValue(data)) && !isTombstoned(key,id)){
         const conv={id,...data};
         if(key==="general" && !Array.isArray(conv.seenBy)) conv.seenBy=[];
-        if(!Array.isArray(conv.comments)) conv.comments=[];
+        if((key==="general"||key==="personal") && !Array.isArray(conv.comments)) conv.comments=[];
         const idx=arr.findIndex(x=>x.id===id);
         if(idx===-1){ arr=[...arr,conv]; } else { arr=[...arr]; arr[idx]=conv; }
       }
-      if(key==="general"){ general=arr; saveJSON(GENERAL_KEY,general.map(stripPhoto)); }
-      else{ personal=arr; saveJSON(PERSONAL_KEY,personal.map(stripPhoto)); }
+      setList(key,arr);
     }
-    else if((key==="general"||key==="personal") && parts.length===3){
+    else if((key==="general"||key==="personal"||key==="chat"||key==="chatTopics") && parts.length===3){
       const id=parts[1]; const field=parts[2];
-      const arr=key==="general"?general:personal;
+      const arr=getList(key);
       const item=arr.find(x=>x.id===id);
       if(item){
         item[field]=data;
         if(field==="seenBy" && !Array.isArray(item.seenBy)) item.seenBy=[];
         if(field==="comments" && !Array.isArray(item.comments)) item.comments=[];
-        saveJSON(key==="general"?GENERAL_KEY:PERSONAL_KEY, arr.map(stripPhoto));
+        saveJSON(LIST_STORAGE[key], arr.map(stripPhoto));
       }
     }
     else if(key==="daily" && parts.length===2){
@@ -914,7 +1007,7 @@
 
   // ---------- header ----------
   function renderHeader(view){
-    const titles={daily:"今日の伝達",general:"全体伝達",personal:"個人伝達",staff:"管理"};
+    const titles={daily:"今日の伝達",general:"全体伝達",personal:"個人伝達",chat:"チャット",staff:"管理"};
     document.getElementById("headerTitle").textContent=titles[view]||"";
     document.getElementById("headerDate").textContent=fmtDate(todayStr());
   }
@@ -927,6 +1020,7 @@
     if(v==="daily") renderDaily();
     if(v==="general") renderGeneralList();
     if(v==="personal") renderPersonal();
+    if(v==="chat") renderChatView(false);
     if(v==="staff") renderStaff();
   }
   document.querySelectorAll("nav.tabs button").forEach(b=>b.onclick=()=>switchView(b.dataset.view));
@@ -1614,6 +1708,334 @@
     toast("送りました");
   };
 
+  // ---------- チャット(話題ごと) ----------
+  // 話題(chatTopics)と発言(chat、topicIdで話題に紐づく)を別々のデータとして持つ。
+  // シフトが違って顔を合わせない人同士が、自分の都合の良い時間に書き込んで話し合うための場所。
+  const CHAT_READ_KEY="tsutae_chat_read_v1";
+  const CHAT_BASE_KEY="tsutae_chat_baseline_v1";
+  const CHAT_AUTHOR_KEY="tsutae_chat_author_v1";
+  const CHAT_PAGE=100;
+  // 未読の基準(この端末でチャット機能が初めて動いた時刻。それ以前の発言は未読扱いにしない)
+  let chatBaseline=Number(localStorage.getItem(CHAT_BASE_KEY)||"0");
+  if(!chatBaseline){ chatBaseline=Date.now(); try{ localStorage.setItem(CHAT_BASE_KEY,String(chatBaseline)); }catch(err){} }
+  let chatRead=loadJSON(CHAT_READ_KEY,{});
+  let openTopicId=null, editingChatId=null, chatReplyTo=null, chatShowAll=false;
+  let showClosedTopics=false, editingTopicTitle=false;
+
+  function jstDate(ts){ const d=new Date(ts); return new Date(d.getTime()+d.getTimezoneOffset()*60000+9*3600000); }
+  function fmtTimeOnly(ts){ const j=jstDate(ts); return p2(j.getHours())+":"+p2(j.getMinutes()); }
+  function dayKeyOf(ts){ const j=jstDate(ts); return j.getFullYear()+"-"+p2(j.getMonth()+1)+"-"+p2(j.getDate()); }
+  function chatAuthorName(){ const v=localStorage.getItem(CHAT_AUTHOR_KEY)||""; return staff.includes(v)?v:""; }
+  function topicMessages(id){ return chat.filter(m=>m.topicId===id).sort((a,b)=>a.createdAt-b.createdAt); }
+  function topicLastAt(t){ const ms=topicMessages(t.id); return ms.length?ms[ms.length-1].createdAt:t.createdAt; }
+  function topicUnread(t){
+    const me=chatAuthorName();
+    const since=chatRead[t.id]!==undefined?chatRead[t.id]:chatBaseline;
+    return chat.filter(m=>m.topicId===t.id && m.createdAt>since && m.author!==me).length;
+  }
+  function updateChatBadge(){
+    const n=chatTopics.reduce((sum,t)=>sum+topicUnread(t),0);
+    const el=document.getElementById("chatBadge");
+    el.textContent=n>99?"99+":String(n);
+    el.style.display=n?"":"none";
+  }
+  function markTopicRead(id){
+    const ms=topicMessages(id);
+    const last=ms.length?ms[ms.length-1].createdAt:0;
+    chatRead[id]=Math.max(last,chatRead[id]||0,chatBaseline);
+    try{ saveJSON(CHAT_READ_KEY,chatRead); }catch(err){}
+    updateChatBadge();
+  }
+  function fillAuthorSelect(sel){
+    const prev=sel.value||chatAuthorName();
+    sel.innerHTML=staffOptionsHtml();
+    if(staff.includes(prev)) sel.value=prev;
+  }
+  function rememberAuthor(name){
+    if(!name) return;
+    try{ localStorage.setItem(CHAT_AUTHOR_KEY,name); }catch(err){}
+    updateChatBadge();
+  }
+  function snippetOf(m){
+    const t=(m.text||"").replace(/\s+/g," ").trim();
+    if(t) return t.length>40?t.slice(0,40)+"…":t;
+    return getPhotos(m).length?"📷 写真":"";
+  }
+
+  function renderChatView(fromRemote){
+    const t=openTopicId?chatTopics.find(x=>x.id===openTopicId):null;
+    if(openTopicId && !t){ openTopicId=null; }
+    if(t) renderTopicDetail(!!fromRemote); else renderTopicList();
+    updateChatBadge();
+  }
+
+  function renderTopicList(){
+    document.getElementById("chatListView").style.display="";
+    document.getElementById("chatDetailView").style.display="none";
+    fillAuthorSelect(document.getElementById("topicAuthor"));
+    document.getElementById("topicTabOpen").classList.toggle("active",!showClosedTopics);
+    document.getElementById("topicTabClosed").classList.toggle("active",showClosedTopics);
+    const list=document.getElementById("topicList");
+    const items=chatTopics.filter(t=>!!t.closed===showClosedTopics)
+      .map(t=>({t,last:topicLastAt(t)})).sort((a,b)=>b.last-a.last);
+    if(!items.length){
+      list.innerHTML=showClosedTopics
+        ? `<div class="empty">解決済みの話題はまだありません</div>`
+        : `<div class="empty">まだ話題がありません<br>「新しい話題」から、朝番・夜番みんなで話し合いたいことを書いてみましょう</div>`;
+      return;
+    }
+    list.innerHTML=items.map(({t,last})=>{
+      const ms=topicMessages(t.id);
+      const lastMsg=ms[ms.length-1];
+      const unread=topicUnread(t);
+      return `<div class="topic-row" data-id="${t.id}">
+        <div class="t-title"><span class="t-name">${escapeHtml(t.title||"(題名なし)")}</span>${t.closed?'<span class="closed-badge">✓ 解決済み</span>':""}${unread?`<span class="unread-badge">${unread}</span>`:""}</div>
+        <div class="t-last">${lastMsg?escapeHtml((lastMsg.author||"")+": "+snippetOf(lastMsg)):""}</div>
+        <div class="t-meta"><span>${escapeHtml(t.author||"")} が開始 · 💬 ${ms.length}件</span><span>${fmtDateTime(last)}</span></div>
+      </div>`;
+    }).join("");
+  }
+  document.getElementById("topicList").onclick=(e)=>{
+    const row=e.target.closest(".topic-row");
+    if(row) openTopic(row.dataset.id);
+  };
+  document.getElementById("topicTabOpen").onclick=()=>{ showClosedTopics=false; renderTopicList(); };
+  document.getElementById("topicTabClosed").onclick=()=>{ showClosedTopics=true; renderTopicList(); };
+  document.getElementById("topicAuthor").onchange=(e)=>rememberAuthor(e.target.value);
+  document.getElementById("chatAuthor").onchange=(e)=>rememberAuthor(e.target.value);
+
+  function scrollToBottom(){ window.scrollTo(0,document.documentElement.scrollHeight); }
+
+  function openTopic(id){
+    openTopicId=id;
+    editingChatId=null; editingTopicTitle=false; chatReplyTo=null; chatShowAll=false;
+    photoDrafts.chatNew=[];
+    renderTopicDetail(false);
+    scrollToBottom();
+  }
+
+  function chatMessagesHtml(msgs,me){
+    let html="", lastDay="";
+    msgs.forEach(m=>{
+      const dk=dayKeyOf(m.createdAt);
+      if(dk!==lastDay){ lastDay=dk; html+=`<div class="chat-date"><span>${fmtDate(dk)}</span></div>`; }
+      if(m.id===editingChatId){
+        html+=`<div class="chat-msg editing"><textarea id="editChatText">${escapeHtml(m.text||"")}</textarea><div class="edit-actions"><button class="btn sm" data-save-chat="${m.id}">保存</button><button class="btn ghost sm" data-cancel-chat="1">キャンセル</button></div></div>`;
+        return;
+      }
+      const own=!!me && m.author===me;
+      const q=(m.replyTo&&m.replyTo.id)?`<div class="chat-quote"><b>${escapeHtml(m.replyTo.author||"")}</b> ${escapeHtml(m.replyTo.text||"")}</div>`:"";
+      html+=`<div class="chat-msg ${own?"own":""}">`
+        +(own?"":`<div class="chat-name">${escapeHtml(m.author||"(不明)")}</div>`)
+        +`<div class="chat-bubble">${q}${m.text?`<div class="chat-text">${escapeHtml(m.text)}</div>`:""}${photosHtml(m)}</div>`
+        +`<div class="chat-meta"><span>${fmtTimeOnly(m.createdAt)}${m.editedAt?" (編集済)":""}</span><button data-reply-chat="${m.id}">返信</button>`
+        +(own?`<button class="edit" data-edit-chat="${m.id}">編集</button><button data-del-chat="${m.id}">削除</button>`:"")
+        +`</div></div>`;
+    });
+    return html;
+  }
+
+  function renderReplyBar(){
+    const bar=document.getElementById("chatReplyBar");
+    if(chatReplyTo){
+      bar.innerHTML=`<span class="r-text">↩ <b>${escapeHtml(chatReplyTo.author||"")}</b> ${escapeHtml(chatReplyTo.text||"")}</span><button class="icon-btn" data-cancel-reply="1">×</button>`;
+      bar.style.display="";
+    }else{
+      bar.style.display="none"; bar.innerHTML="";
+    }
+  }
+  document.getElementById("chatReplyBar").onclick=(e)=>{
+    if(e.target.closest("[data-cancel-reply]")){ chatReplyTo=null; renderReplyBar(); }
+  };
+
+  function renderTopicDetail(fromRemote){
+    const t=chatTopics.find(x=>x.id===openTopicId);
+    if(!t){ openTopicId=null; renderTopicList(); return; }
+    document.getElementById("chatListView").style.display="none";
+    document.getElementById("chatDetailView").style.display="";
+    const me=chatAuthorName();
+
+    const toggle=document.getElementById("topicToggle");
+    toggle.textContent=t.closed?"話し合いを再開":"✓ 解決済みにする";
+    document.getElementById("topicDelete").style.display=(me&&t.author===me)?"":"none";
+
+    const head=document.getElementById("topicHead");
+    if(editingTopicTitle){
+      head.innerHTML=`<input type="text" id="editTopicTitle" value="${escapeHtml(t.title||"")}" style="margin-bottom:8px;"><div class="edit-actions"><button class="btn sm" data-save-title="1">保存</button><button class="btn ghost sm" data-cancel-title="1">キャンセル</button></div>`;
+    }else{
+      head.innerHTML=`<div style="display:flex; align-items:flex-start; gap:8px;"><h2 style="font-size:18px; color:var(--text); margin:0 0 4px; flex:1; display:block;">${escapeHtml(t.title||"(題名なし)")}</h2><button class="icon-btn" data-edit-title="1" style="font-size:13px; color:var(--accent);">編集</button></div>`
+        +`<div style="font-size:12px; color:var(--sub); margin-bottom:14px;">${escapeHtml(t.author||"(不明)")} が開始 · ${fmtDateTime(t.createdAt)}${t.closed?" · ✓ 解決済み":""}</div>`;
+    }
+
+    const list=document.getElementById("chatList");
+    const all=topicMessages(t.id);
+    const shown=chatShowAll?all:all.slice(-CHAT_PAGE);
+    document.getElementById("chatShowMore").style.display=(shown.length<all.length)?"":"none";
+    const nearBottom=(window.innerHeight+window.scrollY)>=document.documentElement.scrollHeight-160;
+    list.innerHTML=shown.length?chatMessagesHtml(shown,me):`<div class="empty">まだ発言がありません</div>`;
+
+    fillAuthorSelect(document.getElementById("chatAuthor"));
+    renderReplyBar();
+    renderPhotoEditRow("chatNewPhotoRow","chatNew");
+    markTopicRead(t.id);
+    if(fromRemote && nearBottom) scrollToBottom();
+  }
+
+  document.getElementById("chatBack").onclick=()=>{
+    openTopicId=null; editingChatId=null; editingTopicTitle=false; chatReplyTo=null;
+    renderTopicList(); updateChatBadge();
+    window.scrollTo(0,0);
+  };
+  document.getElementById("chatShowMoreBtn").onclick=()=>{ chatShowAll=true; renderTopicDetail(false); };
+
+  // 発言一覧(常に同じ要素)にイベントを仕込み、どのボタンかを都度判定する
+  document.getElementById("chatList").onclick=(e)=>{
+    const t=chatTopics.find(x=>x.id===openTopicId);
+    if(!t) return;
+    const img=e.target.closest(".item-photos img");
+    if(img){
+      const box=img.closest(".item-photos");
+      const m=chat.find(x=>x.id===box.dataset.photoOwner);
+      if(m) openLightbox(getPhotos(m)[Number(img.dataset.idx)]);
+      return;
+    }
+    const replyBtn=e.target.closest("[data-reply-chat]");
+    if(replyBtn){
+      const m=chat.find(x=>x.id===replyBtn.dataset.replyChat);
+      if(!m) return;
+      chatReplyTo={id:m.id,author:m.author||"",text:snippetOf(m)};
+      renderReplyBar();
+      document.getElementById("chatInput").focus();
+      return;
+    }
+    const editBtn=e.target.closest("[data-edit-chat]");
+    if(editBtn){ editingChatId=editBtn.dataset.editChat; renderTopicDetail(false); return; }
+    if(e.target.closest("[data-cancel-chat]")){ editingChatId=null; renderTopicDetail(false); return; }
+    const saveBtn=e.target.closest("[data-save-chat]");
+    if(saveBtn){
+      const m=chat.find(x=>x.id===saveBtn.dataset.saveChat);
+      if(!m) return;
+      const text=document.getElementById("editChatText").value.trim();
+      if(!text && !getPhotos(m).length){ toast("内容を入力してください"); return; }
+      const prev={text:m.text,editedAt:m.editedAt};
+      m.text=text; m.editedAt=Date.now();
+      try{ saveChat(); }catch(err){ Object.assign(m,prev); toast("保存に失敗しました(容量不足の可能性があります)"); return; }
+      fbPatch(`/chat/${m.id}`,{text:m.text,editedAt:m.editedAt});
+      editingChatId=null;
+      renderTopicDetail(false);
+      toast("更新しました");
+      return;
+    }
+    const delBtn=e.target.closest("[data-del-chat]");
+    if(delBtn){
+      confirmDelete(delBtn,()=>{
+        const id=delBtn.dataset.delChat;
+        chat=chat.filter(m=>m.id!==id);
+        saveChat();
+        addTombstone("chat",id);
+        fbDelete(`/chat/${id}`);
+        renderTopicDetail(false);
+      });
+    }
+  };
+
+  // 話題のタイトル編集
+  document.getElementById("topicHead").onclick=(e)=>{
+    const t=chatTopics.find(x=>x.id===openTopicId);
+    if(!t) return;
+    if(e.target.closest("[data-edit-title]")){ editingTopicTitle=true; renderTopicDetail(false); return; }
+    if(e.target.closest("[data-cancel-title]")){ editingTopicTitle=false; renderTopicDetail(false); return; }
+    if(e.target.closest("[data-save-title]")){
+      const title=document.getElementById("editTopicTitle").value.trim();
+      if(!title){ toast("話題の題名を入力してください"); return; }
+      t.title=title;
+      saveChatTopics();
+      fbPatch(`/chatTopics/${t.id}`,{title});
+      editingTopicTitle=false;
+      renderTopicDetail(false);
+      toast("更新しました");
+    }
+  };
+
+  document.getElementById("topicToggle").onclick=()=>{
+    const t=chatTopics.find(x=>x.id===openTopicId);
+    if(!t) return;
+    t.closed=!t.closed;
+    saveChatTopics();
+    fbPatch(`/chatTopics/${t.id}`,{closed:t.closed});
+    renderTopicDetail(false);
+    toast(t.closed?"解決済みにしました":"話し合いを再開しました");
+  };
+  document.getElementById("topicDelete").onclick=()=>confirmDelete(document.getElementById("topicDelete"),()=>{
+    const id=openTopicId;
+    const msgs=chat.filter(m=>m.topicId===id);
+    chat=chat.filter(m=>m.topicId!==id);
+    saveChat();
+    msgs.forEach(m=>{ addTombstone("chat",m.id); fbDelete(`/chat/${m.id}`); });
+    chatTopics=chatTopics.filter(x=>x.id!==id);
+    saveChatTopics();
+    addTombstone("chatTopics",id);
+    fbDelete(`/chatTopics/${id}`);
+    delete chatRead[id];
+    openTopicId=null;
+    renderTopicList(); updateChatBadge();
+    window.scrollTo(0,0);
+  });
+
+  function createChatMessage(topicId,author,text,photos,replyTo){
+    const m={id:uid(),topicId,author,text,createdAt:Date.now(),replyTo:replyTo||null,photo:null};
+    setPhotos(m,photos);
+    chat.push(m);
+    try{ saveChat(); }catch(err){ chat.pop(); toast("保存に失敗しました(容量不足の可能性があります)"); return null; }
+    const {id,...rest}=m;
+    fbPut(`/chat/${id}`,tag(rest));
+    return m;
+  }
+
+  document.getElementById("chatSend").onclick=()=>{
+    const t=chatTopics.find(x=>x.id===openTopicId);
+    if(!t) return;
+    const author=document.getElementById("chatAuthor").value;
+    const ta=document.getElementById("chatInput");
+    const text=ta.value.trim();
+    const photos=photoDrafts.chatNew;
+    if(!author){ toast("名前を選んでください"); return; }
+    if(!text && !photos.length) return;
+    rememberAuthor(author);
+    if(!createChatMessage(t.id,author,text,photos,chatReplyTo)) return;
+    ta.value="";
+    photoDrafts.chatNew=[];
+    chatReplyTo=null;
+    renderTopicDetail(false);
+    scrollToBottom();
+  };
+
+  document.getElementById("topicCreate").onclick=()=>{
+    const author=document.getElementById("topicAuthor").value;
+    const titleEl=document.getElementById("topicTitle");
+    const textEl=document.getElementById("topicText");
+    const title=titleEl.value.trim();
+    const text=textEl.value.trim();
+    if(!author){ toast("名前を選んでください"); return; }
+    if(!title||!text){ toast("話題の題名と最初のメッセージを入力してください"); return; }
+    rememberAuthor(author);
+    const t={id:uid(),title,author,createdAt:Date.now(),closed:false};
+    chatTopics.push(t);
+    try{ saveChatTopics(); }catch(err){ chatTopics.pop(); toast("保存に失敗しました(容量不足の可能性があります)"); return; }
+    if(!createChatMessage(t.id,author,text,photoDrafts.topicNew,null)){
+      chatTopics=chatTopics.filter(x=>x.id!==t.id); saveChatTopics(); return;
+    }
+    {
+      const {id,...rest}=t;
+      fbPut(`/chatTopics/${id}`,tag(rest));
+    }
+    titleEl.value=""; textEl.value="";
+    photoDrafts.topicNew=[];
+    renderPhotoEditRow("topicNewPhotoRow","topicNew");
+    toast("話題を作りました");
+    openTopic(t.id);
+  };
+
   // ---------- スタッフ管理 ----------
   let editingStaffName=null;
 
@@ -1725,6 +2147,20 @@
     });
     savePersonal();
 
+    // チャットの話題の作成者・発言者・返信先の名前を差し替える
+    chatTopics.forEach(t=>{
+      if(t.author===oldName){ t.author=newName; fbPatch(`/chatTopics/${t.id}`,{author:newName}); }
+    });
+    saveChatTopics();
+    chat.forEach(m=>{
+      const patch={};
+      if(m.author===oldName){ m.author=newName; patch.author=newName; }
+      if(m.replyTo && m.replyTo.author===oldName){ m.replyTo=Object.assign({},m.replyTo,{author:newName}); patch.replyTo=m.replyTo; }
+      if(Object.keys(patch).length) fbPatch(`/chat/${m.id}`,patch);
+    });
+    saveChat();
+    if(localStorage.getItem(CHAT_AUTHOR_KEY)===oldName) localStorage.setItem(CHAT_AUTHOR_KEY,newName);
+
     renderStaff();
     toast("名前を変更しました");
   }
@@ -1753,6 +2189,8 @@
   renderPhotoEditRow("dailyNewPhotoRow","dailyNew");
   renderPhotoEditRow("genNewPhotoRow","genNew");
   renderPhotoEditRow("perNewPhotoRow","perNew");
+  renderPhotoEditRow("topicNewPhotoRow","topicNew");
+  updateChatBadge();
   switchView("daily");
   startSync();
 })();
