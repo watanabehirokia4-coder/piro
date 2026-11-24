@@ -1826,7 +1826,7 @@
       const own=!!me && m.author===me;
       const q=(m.replyTo&&m.replyTo.id)?`<div class="chat-quote"><b>${escapeHtml(m.replyTo.author||"")}</b> ${escapeHtml(m.replyTo.text||"")}</div>`:"";
       html+=`<div class="chat-msg ${own?"own":""}">`
-        +(own?"":`<div class="chat-name">${escapeHtml(m.author||"(不明)")}</div>`)
+        +`<div class="chat-name">${escapeHtml(m.author||"(不明)")}</div>`
         +`<div class="chat-bubble">${q}${m.text?`<div class="chat-text">${escapeHtml(m.text)}</div>`:""}${photosHtml(m)}</div>`
         +`<div class="chat-meta"><span>${fmtTimeOnly(m.createdAt)}${m.editedAt?" (編集済)":""}</span><button data-reply-chat="${m.id}">返信</button>`
         +(own?`<button class="edit" data-edit-chat="${m.id}">編集</button><button data-del-chat="${m.id}">削除</button>`:"")
