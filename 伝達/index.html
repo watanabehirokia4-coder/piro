@@ -194,10 +194,13 @@
   .react-picker{display:flex; gap:2px; background:var(--card); border:1px solid var(--line); border-radius:20px; padding:3px 8px; margin-top:4px; box-shadow:var(--shadow);}
   .react-picker button{background:none; border:none; font-size:22px; cursor:pointer; padding:2px 5px; border-radius:10px;}
   .react-picker button.mine{background:#fde8e5;}
-  .topic-opening{background:var(--card2); border:1px solid var(--line); border-left:3px solid var(--accent); border-radius:10px; padding:10px 12px; margin-bottom:6px;}
-  .topic-opening .opening-label{font-size:11px; color:var(--accent); font-weight:700; margin-bottom:6px;}
+  .agenda-label{font-size:12px; color:var(--accent); font-weight:700; letter-spacing:.06em; margin-bottom:4px;}
+  .discussion-label{font-size:13px; font-weight:700; color:var(--sub); letter-spacing:.04em; margin:18px 0 4px; padding-top:14px; border-top:1px solid var(--line);}
+  .topic-opening{background:#fff7f1; border:1px solid #f3d9cc; border-radius:10px; padding:10px 12px; margin-bottom:4px;}
+  .topic-opening .opening-label{font-size:11px; color:var(--sub); font-weight:700; margin-bottom:6px;}
+  .topic-opening .chat-name{display:none;}
+  .topic-opening .chat-text{font-size:15px; line-height:1.7;}
   .topic-opening .chat-msg{margin-bottom:0; align-items:stretch;}
-  .topic-opening .chat-name{margin-left:0;}
   .topic-opening .chat-bubble{background:transparent; border:none; padding:0; max-width:100%;}
   .topic-opening .chat-meta{margin-left:0;}
   .topic-opening .chat-reacts{margin-left:0;}
@@ -319,15 +322,15 @@
   <section class="view" id="view-chat">
     <div id="chatListView">
       <div class="card">
-        <h2>新しい話題</h2>
+        <h2>新しい議題</h2>
         <select id="topicAuthor" style="margin-bottom:8px;"></select>
-        <input type="text" id="topicTitle" placeholder="話題(例: 綺麗な日付スタンプの押し方)" style="margin-bottom:8px;">
-        <textarea id="topicText" placeholder="最初のメッセージ(困っていること・提案など)"></textarea>
+        <input type="text" id="topicTitle" placeholder="議題(例: 綺麗な日付スタンプの押し方)" style="margin-bottom:8px;">
+        <textarea id="topicText" placeholder="議題の内容(困っていること・提案・みんなに聞きたいことなど)"></textarea>
         <div class="photo-field" id="topicNewPhotoRow"></div>
-        <button class="btn block" id="topicCreate" style="margin-top:10px;">話題を作る</button>
+        <button class="btn block" id="topicCreate" style="margin-top:10px;">議題を作る</button>
       </div>
       <div class="card">
-        <h2>話題一覧</h2>
+        <h2>議題一覧</h2>
         <div class="chips" style="margin-bottom:12px;">
           <div class="chip active" id="topicTabOpen">話し合い中</div>
           <div class="chip" id="topicTabClosed">解決済み</div>
@@ -338,13 +341,14 @@
 
     <div id="chatDetailView" style="display:none;">
       <div class="backbar">
-        <button class="btn ghost sm" id="chatBack">◀ 話題一覧へ</button>
+        <button class="btn ghost sm" id="chatBack">◀ 議題一覧へ</button>
         <button class="btn ghost sm" id="topicToggle" style="margin-left:auto;"></button>
         <button class="btn danger sm" id="topicDelete">削除</button>
       </div>
       <div class="card">
         <div id="topicHead"></div>
         <div id="topicOpening"></div>
+        <div class="discussion-label">💬 話し合い</div>
         <div id="chatList"></div>
         <div id="chatShowMore" style="display:none; text-align:center; margin-bottom:10px;"><button class="btn ghost sm" id="chatShowMoreBtn">以前のメッセージを表示</button></div>
       </div>
@@ -426,7 +430,7 @@
   const CHATTOPIC_KEY="tsutae_chattopics_v1";
   const WEEKDAYS=["日","月","火","水","木","金","土"];
   const FIREBASE_BASE="https://kagurazyu-dentatsu-default-rtdb.asia-southeast1.firebasedatabase.app";
-  const APP_VERSION="20261124d";
+  const APP_VERSION="20261124e";
 
   const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,6);
   const p2=n=>String(n).padStart(2,"0");
@@ -1858,8 +1862,8 @@
       .map(t=>({t,last:topicLastAt(t)})).sort((a,b)=>b.last-a.last);
     if(!items.length){
       list.innerHTML=showClosedTopics
-        ? `<div class="empty">解決済みの話題はまだありません</div>`
-        : `<div class="empty">まだ話題がありません<br>「新しい話題」から、朝番・夜番みんなで話し合いたいことを書いてみましょう</div>`;
+        ? `<div class="empty">解決済みの議題はまだありません</div>`
+        : `<div class="empty">まだ議題がありません<br>「新しい議題」から、朝番・夜番みんなで話し合いたいことを書いてみましょう</div>`;
       return;
     }
     list.innerHTML=items.map(({t,last})=>{
@@ -1869,7 +1873,7 @@
       return `<div class="topic-row" data-id="${t.id}">
         <div class="t-title"><span class="t-name">${escapeHtml(t.title||"(題名なし)")}</span>${t.closed?'<span class="closed-badge">✓ 解決済み</span>':""}${unread?`<span class="unread-badge">${unread}</span>`:""}</div>
         <div class="t-last">${lastMsg?escapeHtml((lastMsg.author||"")+": "+snippetOf(lastMsg)):""}</div>
-        <div class="t-meta"><span>${escapeHtml(t.author||"")} が開始 · 💬 ${ms.length}件</span><span>${fmtDateTime(last)}</span></div>
+        <div class="t-meta"><span>${escapeHtml(t.author||"")} が提起 · 💬 ${ms.length}件</span><span>${fmtDateTime(last)}</span></div>
       </div>`;
     }).join("");
   }
@@ -1906,8 +1910,8 @@
     }
     return html;
   }
-  // 話題の最初のメッセージ(話題を作った時に一緒に投稿されたもの)。題名と同じく
-  // 会話の流れには混ぜず、話題の上部に固定して表示する。
+  // 議題の内容(議題を作った時に一緒に投稿された最初のメッセージ)。
+  // 会話の流れには混ぜず、議題(題名)とセットで上部に「議題」として表示する。
   function topicOpener(t){
     return topicMessages(t.id).find(m=>m.author===t.author && Math.abs(m.createdAt-t.createdAt)<=10000)||null;
   }
@@ -1927,7 +1931,7 @@
         +`<div class="chat-name">${escapeHtml(m.author||"(不明)")}</div>`
         +`<div class="chat-bubble">${q}${m.text?`<div class="chat-text">${escapeHtml(m.text)}</div>`:""}${photosHtml(m)}</div>`
         +reactionsHtml(m,me)
-        +`<div class="chat-meta"><span>${fmtTimeOnly(m.createdAt)}${m.editedAt?" (編集済)":""}</span><button data-react-open="${m.id}">😊</button><button data-reply-chat="${m.id}">返信</button>`
+        +`<div class="chat-meta"><span>${fmtTimeOnly(m.createdAt)}${m.editedAt?" (編集済)":""}</span><button data-react-open="${m.id}">😊</button>${pinned?"":`<button data-reply-chat="${m.id}">返信</button>`}`
         +(mine?`<button class="edit" data-edit-chat="${m.id}">編集</button>`:"")
         +(own?`<button data-del-chat="${m.id}">削除</button>`:"")
         +`</div></div>`;
@@ -1961,16 +1965,16 @@
 
     const head=document.getElementById("topicHead");
     if(editingTopicTitle){
-      head.innerHTML=`<input type="text" id="editTopicTitle" value="${escapeHtml(t.title||"")}" style="margin-bottom:8px;"><div class="edit-actions"><button class="btn sm" data-save-title="1">保存</button><button class="btn ghost sm" data-cancel-title="1">キャンセル</button></div>`;
+      head.innerHTML=`<div class="agenda-label">📋 議題</div><input type="text" id="editTopicTitle" value="${escapeHtml(t.title||"")}" style="margin-bottom:8px;"><div class="edit-actions"><button class="btn sm" data-save-title="1">保存</button><button class="btn ghost sm" data-cancel-title="1">キャンセル</button></div>`;
     }else{
-      head.innerHTML=`<div style="display:flex; align-items:flex-start; gap:8px;"><h2 style="font-size:18px; color:var(--text); margin:0 0 4px; flex:1; display:block;">${escapeHtml(t.title||"(題名なし)")}</h2><button class="icon-btn" data-edit-title="1" style="font-size:13px; color:var(--accent);">編集</button></div>`
-        +`<div style="font-size:12px; color:var(--sub); margin-bottom:14px;">${escapeHtml(t.author||"(不明)")} が開始 · ${fmtDateTime(t.createdAt)}${t.closed?" · ✓ 解決済み":""}</div>`;
+      head.innerHTML=`<div class="agenda-label">📋 議題</div><div style="display:flex; align-items:flex-start; gap:8px;"><h2 style="font-size:18px; color:var(--text); margin:0 0 4px; flex:1; display:block;">${escapeHtml(t.title||"(題名なし)")}</h2><button class="icon-btn" data-edit-title="1" style="font-size:13px; color:var(--accent);">編集</button></div>`
+        +`<div style="font-size:12px; color:var(--sub); margin-bottom:14px;">${escapeHtml(t.author||"(不明)")} が提起 · ${fmtDateTime(t.createdAt)}${t.closed?" · ✓ 解決済み":""}</div>`;
     }
 
     const list=document.getElementById("chatList");
     const opener=topicOpener(t);
     document.getElementById("topicOpening").innerHTML=opener
-      ? `<div class="topic-opening"><div class="opening-label">📌 最初のメッセージ</div>${chatMessagesHtml([opener],me,true)}</div>`
+      ? `<div class="topic-opening"><div class="opening-label">議題の内容</div>${chatMessagesHtml([opener],me,true)}</div>`
       : "";
     const all=topicMessages(t.id).filter(m=>!opener||m.id!==opener.id);
     const shown=chatShowAll?all:all.slice(-CHAT_PAGE);
@@ -2068,7 +2072,7 @@
     if(e.target.closest("[data-cancel-title]")){ editingTopicTitle=false; renderTopicDetail(false); return; }
     if(e.target.closest("[data-save-title]")){
       const title=document.getElementById("editTopicTitle").value.trim();
-      if(!title){ toast("話題の題名を入力してください"); return; }
+      if(!title){ toast("議題を入力してください"); return; }
       t.title=title;
       saveChatTopics();
       fbPatch(`/chatTopics/${t.id}`,{title});
@@ -2138,7 +2142,7 @@
     const title=titleEl.value.trim();
     const text=textEl.value.trim();
     if(!author){ toast("名前を選んでください"); return; }
-    if(!title||!text){ toast("話題の題名と最初のメッセージを入力してください"); return; }
+    if(!title||!text){ toast("議題と、その内容を入力してください"); return; }
     rememberAuthor(author);
     const t={id:uid(),title,author,createdAt:Date.now(),closed:false};
     chatTopics.push(t);
@@ -2153,7 +2157,7 @@
     titleEl.value=""; textEl.value="";
     photoDrafts.topicNew=[];
     renderPhotoEditRow("topicNewPhotoRow","topicNew");
-    toast("話題を作りました");
+    toast("議題を作りました");
     openTopic(t.id);
   };
 
